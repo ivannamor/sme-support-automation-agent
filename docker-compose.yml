@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    image: door-window-assistant:latest
+    env_file:
+      - .env
+    ports:
+      - "8501:8501"   # Streamlit UI
+      - "8000:8000"   # FastAPI inventory API
+    volumes:
+      - ./db:/app/db               # SQLite (company.db) + Chroma vector store
+      - ./logs:/app/logs
+      - ./secrets:/app/secrets     # Google OAuth credentials.json / token.json
+      - ./data:/app/data           # website.txt + source PDFs
+      - ./sections:/app/sections   # generated catalogue section map
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped

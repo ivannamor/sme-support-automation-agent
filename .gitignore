@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+venv_new/
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.crt
+
+# Logs and runtime outputs
+logs/
+*.log
+*.tmp
+*.bak
+*_backup.txt
+requirements_current_backup.txt
+
+# Databases and generated vector stores
+db/
+door_tech_db/
+*.sqlite
+*.sqlite3
+*.db
+*.duckdb
+
+# Generated Streamlit/static artifacts
+.streamlit/config
+app/static/
+static/
+
+# Local LangGraph dev-server runtime state (checkpoints/store from `langgraph dev`)
+.langgraph_api/
+
+# Evaluation outputs
+evaluation/*results*.csv
+evaluation/*outputs*.jsonl
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

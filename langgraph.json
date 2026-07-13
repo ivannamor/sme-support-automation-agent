@@ -1,0 +1,9 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "client": "backend.studio_graphs:build_client_graph",
+    "installer": "backend.studio_graphs:build_installer_graph",
+    "manager": "backend.studio_graphs:build_manager_graph"
+  },
+  "env": ".env"
+}

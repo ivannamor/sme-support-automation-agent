@@ -1,0 +1,16 @@
+[theme]
+base="light"
+primaryColor="#2A5748"
+backgroundColor="#E3E2DD"
+secondaryBackgroundColor="#EBEAE3"
+textColor="#161613"
+font="Montserrat:https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap"
+
+[server]
+enableStaticServing=true
+address="0.0.0.0"
+port=8501
+headless=true
+
+[browser]
+gatherUsageStats=false

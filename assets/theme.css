@@ -1,0 +1,378 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+
+:root {
+    --bg: #E3E2DD;
+    --bg-panel: #EBEAE3;
+    --ink: #161613;
+    --text-2: #4E4D47;
+    --text-3: #8A8A82;
+    --line: #C7C6BE;
+    --line-strong: #161613;
+    --green: #2A5748;
+    --green-soft: #3D6B57;
+    --green-tint: #D9E2DC;
+    --cream: #F3F1E9;
+    --amber: #A8712E;
+}
+
+/* ── Font — Montserrat everywhere ──────────────────────────────────────────── */
+html, body, [class*="css"], .stMarkdown, button, input, select, textarea,
+.stTextInput > div > div > input, .stSelectbox > div > div > div,
+[data-testid="stAppViewContainer"], [data-testid="stSidebar"],
+[data-testid="stMetricValue"], [data-testid="stMetricLabel"],
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Montserrat', sans-serif !important;
+    font-weight: 700 !important;
+    color: var(--ink) !important;
+    letter-spacing: -0.01em;
+}
+h2 { font-size: 1.15rem !important; }
+h3 { font-size: 1rem !important; }
+
+p, span, li, label, .stMarkdown, .stMarkdown p {
+    color: var(--ink) !important;
+}
+
+/* Eyebrow / technical labels — uppercase, tracked, semi-bold */
+.eyebrow, .mono-accent {
+    font-family: 'Montserrat', sans-serif !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    font-weight: 700 !important;
+}
+
+/* Hide Streamlit's default page nav (custom sidebar nav used instead) */
+[data-testid="stSidebarNavContainer"] { display: none !important; }
+[data-testid="stSidebarNavItems"]     { display: none !important; }
+
+/* ── Backgrounds ──────────────────────────────────────────────────────────── */
+[data-testid="stAppViewContainer"], .stApp { background-color: var(--bg) !important; }
+[data-testid="stHeader"] { background-color: transparent !important; }
+
+[data-testid="stSidebar"] {
+    background-color: var(--bg-panel) !important;
+    border-right: 1px solid var(--line) !important;
+}
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h4, [data-testid="stSidebar"] h5, [data-testid="stSidebar"] h6,
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] li,
+[data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] .stMarkdown p {
+    color: var(--ink) !important;
+}
+[data-testid="stSidebar"] .stCaption, [data-testid="stSidebar"] small { color: var(--text-3) !important; }
+[data-testid="stSidebar"] hr { border-color: var(--line) !important; }
+
+/* Chat / dashboard split zones (manager & installer pages) — same two-tone
+   layout as before, restyled to the new palette. */
+.st-key-dashboard_zone {
+    background-color: var(--bg-panel) !important;
+    border-left: 3px solid var(--green) !important;
+    border-radius: 0 4px 4px 0 !important;
+    padding: 1rem 1.25rem !important;
+}
+
+/* ── Buttons — flat, hairline border, minimal radius, no shadow ────────────── */
+.stButton > button, [data-testid="stBaseButton-secondary"] {
+    background-color: transparent !important;
+    border: 1px solid var(--line-strong) !important;
+    color: var(--ink) !important;
+    border-radius: 3px !important;
+    font-weight: 600 !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 0.02em !important;
+    box-shadow: none !important;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease !important;
+}
+.stButton > button p, .stButton > button span,
+[data-testid="stBaseButton-secondary"] p, [data-testid="stBaseButton-secondary"] span {
+    color: var(--ink) !important;
+}
+.stButton > button:hover, [data-testid="stBaseButton-secondary"]:hover {
+    background-color: var(--green-tint) !important;
+    border-color: var(--green) !important;
+}
+.stButton > button:hover p, .stButton > button:hover span,
+[data-testid="stBaseButton-secondary"]:hover p, [data-testid="stBaseButton-secondary"]:hover span {
+    color: var(--green) !important;
+}
+.stButton > button[kind="primary"], [data-testid="stBaseButton-primary"] {
+    background-color: var(--green) !important;
+    border: 1px solid var(--green) !important;
+    border-radius: 3px !important;
+    font-weight: 600 !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 0.02em !important;
+    box-shadow: none !important;
+}
+.stButton > button[kind="primary"] p, .stButton > button[kind="primary"] span,
+[data-testid="stBaseButton-primary"] p, [data-testid="stBaseButton-primary"] span {
+    color: var(--cream) !important;
+}
+.stButton > button[kind="primary"]:hover, [data-testid="stBaseButton-primary"]:hover {
+    background-color: var(--green-soft) !important;
+    border-color: var(--green-soft) !important;
+}
+.stButton > button:focus-visible, [data-testid="stBaseButton-secondary"]:focus-visible,
+[data-testid="stBaseButton-primary"]:focus-visible {
+    outline: 2px solid var(--green) !important;
+    outline-offset: 2px !important;
+}
+
+/* Sidebar buttons sit on --bg-panel already, so the default outline style
+   (transparent + hairline border) works there without an override. */
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+[data-baseweb="tab"] {
+    font-family: 'Montserrat', sans-serif !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    font-weight: 600 !important;
+    font-size: 0.8rem !important;
+    color: var(--text-2) !important;
+}
+[data-baseweb="tab"][aria-selected="true"] {
+    color: var(--green) !important;
+    border-bottom: 2px solid var(--green) !important;
+}
+
+/* ── Cards / containers — flat, hairline border, minimal radius ────────────── */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 4px !important;
+    border-color: var(--line) !important;
+    box-shadow: none !important;
+    transition: border-color 0.15s ease !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    border-color: var(--line-strong) !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+[data-testid="stExpander"] {
+    border-radius: 4px !important;
+    border-color: var(--line) !important;
+}
+
+[data-testid="stChatMessage"] {
+    border-radius: 4px !important;
+    border: 1px solid var(--line) !important;
+    padding: 0.75rem 1rem !important;
+    background-color: var(--bg-panel) !important;
+    box-shadow: none !important;
+}
+
+.stCaption, small { color: var(--text-3) !important; font-size: 0.8rem !important; }
+
+/* Alerts (st.info/success/warning/error) — bordered, transparent-ish fill,
+   never a solid loud color block. */
+div[data-testid="stAlert"] {
+    background-color: var(--bg-panel) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+}
+div[data-testid="stAlert"] p { color: var(--ink) !important; }
+
+hr { border-color: var(--line) !important; margin: 0.75rem 0 !important; }
+
+/* ── Page header — one deliberate full-green band for brand identity ───────── */
+.page-header-sticky {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 999 !important;
+    background-color: var(--green) !important;
+    background-image: none !important;
+    padding: 0.75rem 1rem 0.85rem 1rem !important;
+    border-radius: 4px !important;
+    margin-bottom: 0.5rem !important;
+}
+.page-header-sticky .header-title {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: 'Montserrat', sans-serif !important;
+    font-size: 1.5rem !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    color: var(--cream) !important;
+}
+.page-header-sticky .header-subtitle {
+    margin: 0.15rem 0 0 0 !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    color: var(--green-tint) !important;
+}
+
+[data-testid="stChatInput"] {
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 100 !important;
+    background: var(--bg) !important;
+    padding: 0.5rem 0 !important;
+    border-top: 1px solid var(--line) !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+    scroll-behavior: smooth !important;
+}
+
+/* ── Fixed viewport layout — the header stays pinned at the top and the chat
+   input pinned at the bottom regardless of browser zoom level, and the chat
+   pane / dashboard pane each get their OWN independent scrollbar instead of
+   the whole page growing and scrolling as one.
+
+   Verified against Streamlit's own element tree (via streamlit.testing.v1.
+   AppTest on a minimal repro script) rather than guessed: the header
+   markdown and the columns row are direct siblings under the main block
+   container, with no extra wrapper level in between.
+
+   A previous version of this rule applied `flex-direction: column` to
+   EVERY matched ancestor uniformly, including the row itself
+   ([data-testid="stHorizontalBlock"]) — that forced the row to stack its
+   two columns vertically instead of laying them out side by side, and
+   broke the flex-grow chain the actual scroll boxes need. Each level below
+   only gets the flex-direction that level actually needs.
+
+   The actual scroll box is Streamlit's own native height="stretch"
+   container (see render_column_resize_handle's callers passing
+   height="stretch" to st.container(key="chat_zone"/"dashboard_zone")) —
+   this CSS only has to make sure every ancestor down to that container
+   passes along a real, bounded height for "stretch" to fill. */
+html, body {
+    height: 100% !important;
+    overflow: hidden !important;
+}
+[data-testid="stAppViewContainer"] {
+    height: 100vh !important;
+    overflow: hidden !important;
+}
+[data-testid="stMain"] {
+    height: 100vh !important;
+    overflow: hidden !important;
+}
+[data-testid="stMainBlockContainer"] {
+    height: 100vh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+/* Every page body sits inside exactly one root [data-testid="stVerticalBlock"]
+   — a direct child of stMainBlockContainer, wrapping the header and the
+   chat/dashboard row together (verified against the live DOM; its class is
+   an emotion-cache hash that changes across runs, hence targeting by testid
+   + child combinator instead). Streamlit gives it flex: 1 1 0% but leaves
+   min-height at its default "auto", which for a column flex item resolves
+   to its content's min-content height — so it grows past the 100vh bound
+   above instead of stopping there, dragging everything below it (including
+   the chat pane) along with it instead of letting the chat pane scroll
+   internally. Without this rule NEITHER of the two overflow: hidden /
+   overflow-y: auto rules further down ever come into play, because the
+   box that's supposed to hand them a bounded height never actually has
+   one. */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+[data-testid="stMainBlockContainer"] [data-testid="stElementContainer"]:has(.page-header-sticky) {
+    flex: 0 0 auto !important;
+}
+/* The row containing chat_zone/dashboard_zone grows to fill the remaining
+   vertical space under the header — its OWN internal direction stays a
+   row (left/right columns), so flex-direction is deliberately untouched. */
+[data-testid="stHorizontalBlock"]:has(.st-key-chat_zone),
+[data-testid="stHorizontalBlock"]:has(.st-key-dashboard_zone) {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+/* Each column spans the row's full height; it must not scroll itself (its
+   height="stretch" child below does) or there would be two nested
+   scrollbars instead of one. */
+[data-testid="stColumn"]:has(.st-key-chat_zone),
+[data-testid="stColumn"]:has(.st-key-dashboard_zone) {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+/* Streamlit wraps every keyed container in its own [data-testid=
+   "stLayoutWrapper"] div (verified against the live DOM, one level up from
+   .st-key-chat_zone/.st-key-dashboard_zone — not present in the Python-side
+   element tree AppTest reflects, which is why the original version of this
+   fix missed it). That wrapper defaults to flex: 0 1 auto / min-height:
+   auto, i.e. it does NOT stretch — it sizes itself to its child's content
+   instead. Since the child's `flex: 1 1 auto` below only grows into space
+   its own parent actually has, an unstretched wrapper gives it nothing to
+   grow into, so the child also falls back to content-based sizing and
+   grows past the viewport instead of stopping and scrolling. Forcing the
+   wrapper to stretch here is what makes the fixed height further down
+   actually take effect. */
+[data-testid="stLayoutWrapper"]:has(.st-key-chat_zone),
+[data-testid="stLayoutWrapper"]:has(.st-key-dashboard_zone) {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+/* This is the actual scrolling element. Streamlit's own height="stretch"
+   does NOT set overflow-y: auto on the container itself (verified against
+   the live DOM — its computed overflow-y is "visible"), so without this
+   rule any content past the flex box's bounds is silently clipped by the
+   `overflow: hidden` ancestors above with no scrollbar to reach it, and
+   the sticky chat input (below) has no scrolling ancestor to pin against
+   so it just sits wherever it falls in the normal flow instead of at the
+   bottom. */
+.st-key-chat_zone, .st-key-dashboard_zone {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+}
+/* Client page: no columns at all, chat_zone sits directly under the main
+   block container itself (verified via AppTest) — descendant combinator
+   rather than a direct-child one, in case Streamlit's frontend adds a
+   padding/width wrapper here that isn't part of the backend element tree
+   AppTest reflects. */
+[data-testid="stMainBlockContainer"] .st-key-chat_zone {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+}
+
+/* ── Metrics (st.metric, if ever used) ─────────────────────────────────────── */
+[data-testid="stMetricValue"] {
+    font-weight: 700 !important;
+    color: var(--ink) !important;
+}
+[data-testid="stMetricLabel"] {
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    font-weight: 600 !important;
+    color: var(--text-2) !important;
+}
+
+/* ── DataFrames / tables — container-level only; st.dataframe renders its
+   grid on canvas, so header/row text styling can't be reached via CSS, but
+   the border/background/radius below still apply. ─────────────────────────── */
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+    border: 1px solid var(--line) !important;
+    border-radius: 4px !important;
+}
+[data-testid="stTable"] thead tr th {
+    text-transform: uppercase !important;
+    font-size: 0.7rem !important;
+    letter-spacing: 0.06em !important;
+    color: var(--text-3) !important;
+    border-bottom: 1px solid var(--line) !important;
+}
+[data-testid="stTable"] tbody tr td {
+    border-bottom: 1px solid var(--line) !important;
+}

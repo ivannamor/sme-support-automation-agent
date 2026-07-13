@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+venv_new/
+env/
+
+# Version control / editor / CI
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+.claude/
+
+# Secrets and env files (baked images must never contain these)
+.env
+.env.*
+!.env.example
+secrets/
+
+# Runtime state — provided via bind mounts in docker-compose.yml, not baked
+# into the image, so they persist across rebuilds and stay out of the image.
+db/
+logs/
+data/
+sections/
+app/static/
+
+# Streamlit local machine-id file (not the config.toml theme, which IS needed)
+.streamlit/config
+
+# Docs/tests not needed at runtime
+README.md
+tests/

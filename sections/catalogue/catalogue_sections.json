@@ -1,0 +1,72 @@
+[
+  {
+    "url": "https://www.marinig.com/serie-verolegno/",
+    "doc_type": "category",
+    "product_name": null
+  },
+  {
+    "url": "https://www.marinig.com/prodotto/iris/",
+    "doc_type": "product",
+    "product_name": "IRIS"
+  },
+  {
+    "url": "https://www.marinig.com/prodotto/diamant/",
+    "doc_type": "product",
+    "product_name": "DIAMANT"
+  },
+  {
+    "url": "https://www.marinig.com/prodotto/stilos/",
+    "doc_type": "product",
+    "product_name": "STILOS"
+  },
+  {
+    "url": "https://www.marinig.com/serie-legno-alluminio/",
+    "doc_type": "category",
+    "product_name": null
+  },
+  {
+    "url": "https://www.marinig.com/prodotto/easy/",
+    "doc_type": "product",
+    "product_name": "EASY"
+  },
+  {
+    "url": "https://www.marinig.com/prodotto/minimal/",
+    "doc_type": "product",
+    "product_name": "MINIMAL"
+  },
+  {
+    "url": "https://www.marinig.com/prodotto/magis-40/",
+    "doc_type": "product",
+    "product_name": "MAGIS 40"
+  },
+  {
+    "url": "https://www.marinig.com/serie-pvc/",
+    "doc_type": "category",
+    "product_name": null
+  },
+  {
+    "url": "https://www.marinig.com/prodotto/elegant/",
+    "doc_type": "product",
+    "product_name": "ELEGANT"
+  },
+  {
+    "url": "https://www.marinig.com/portoncini-dingresso/",
+    "doc_type": "category",
+    "product_name": null
+  },
+  {
+    "url": "https://www.marinig.com/schermi-solari/",
+    "doc_type": "category",
+    "product_name": null
+  },
+  {
+    "url": "https://www.marinig.com/complementi/",
+    "doc_type": "category",
+    "product_name": null
+  },
+  {
+    "url": "https://www.marinig.com/controtelai/",
+    "doc_type": "category",
+    "product_name": null
+  }
+]
