@@ -1,6 +1,6 @@
 from contextvars import ContextVar
 
-# Set once per request in assistant.ask() / stream_ask(); read by the log filter.
+# Set once per request in DoorAssistantAgent._stream(); read by the log filter.
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
 # Set from ui_shared.handle_user_turn before each agent invocation so tools

@@ -14,7 +14,7 @@ execute immediately without interruption.
 """
 
 import logging
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Callable, Literal, Optional, Union
 
 from typing_extensions import TypedDict
 
@@ -123,7 +123,7 @@ def _confirmation_summary(tc: dict) -> str:
 def build_graph(
     llm,
     tools: list,
-    system_prompt: str,
+    system_prompt: Union[str, Callable[[], str]],
     checkpointer=None,
     mutating_tool_names: set | None = None,
 ):
@@ -133,7 +133,9 @@ def build_graph(
     Args:
         llm:           A streaming-enabled ChatOpenAI (or compatible) instance.
         tools:         Full list of LangChain tools available to the agent.
-        system_prompt: Static system prompt prepended on every agent invocation.
+        system_prompt: System prompt prepended on every agent invocation — a
+                       string, or a zero-arg callable re-evaluated on each call
+                       (for content that changes over time, e.g. today's date).
         checkpointer:  LangGraph checkpointer (MemorySaver, SqliteSaver, …).
                        Required for interrupt()/resume to work.
     """
@@ -149,7 +151,8 @@ def build_graph(
     # ── nodes ─────────────────────────────────────────────────────────────────
 
     def agent_node(state: AgentState) -> dict:
-        messages = [SystemMessage(content=system_prompt)] + state["messages"]
+        prompt = system_prompt() if callable(system_prompt) else system_prompt
+        messages = [SystemMessage(content=prompt)] + state["messages"]
         response = llm_with_tools.invoke(messages)
         return {"messages": [response]}
 
