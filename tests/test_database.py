@@ -125,6 +125,7 @@ def test_full_survey_to_installation_lifecycle(test_db):
     bid = db.create_pending_booking(
         model="IRIS", date_str="2026-08-01", time_str="10:00", requested_by="client1",
         ticket_phase="survey", client_address="Via Roma 1", quantity=2,
+        client_email="client1@example.com",
     )
     db.resolve_booking(bid, "approved", "manager1")
     db.claim_booking(bid, "inst_a")
@@ -140,7 +141,8 @@ def test_full_survey_to_installation_lifecycle(test_db):
     assert ticket["estimated_price"] == 850.0
 
     assert db.resolve_client_estimate_response(
-        bid, "accept", "2026-08-10", "11:00", changed_by="client1@example.com"
+        bid, "accept", "2026-08-10", "11:00", changed_by="client1@example.com",
+        client_email="client1@example.com",
     )
     ticket = db.get_all_tickets()[0]
     assert ticket["ticket_phase"] == "installation"
@@ -184,16 +186,50 @@ def test_reject_survey_report_sends_back_to_in_progress(test_db):
     assert ticket["ticket_status"] == "in_progress"
 
 
-def test_resolve_client_estimate_response_reject_cancels_ticket(test_db):
-    bid = db.create_pending_booking(model="IRIS", date_str="2026-08-01", time_str="10:00", ticket_phase="survey")
+def _make_awaiting_client_ticket(client_email: str = "client1@example.com") -> int:
+    bid = db.create_pending_booking(
+        model="IRIS", date_str="2026-08-01", time_str="10:00", ticket_phase="survey",
+        client_email=client_email,
+    )
     db.resolve_booking(bid, "approved", "manager1")
     db.claim_booking(bid, "inst_a")
     db.save_survey_measurements(bid, 150, 100, 8, "standard", changed_by="inst_a")
     db.resolve_survey_estimate(bid, 850.0, "manager1")
-    assert db.resolve_client_estimate_response(bid, "reject", changed_by="client1@example.com")
+    return bid
+
+
+def test_resolve_client_estimate_response_reject_cancels_ticket(test_db):
+    bid = _make_awaiting_client_ticket()
+    assert db.resolve_client_estimate_response(
+        bid, "reject", changed_by="client1@example.com", client_email="client1@example.com",
+    )
     ticket = db.get_all_tickets()[0]
     assert ticket["ticket_status"] == "cancelled"
     assert ticket["client_estimate_response"] == "rejected"
+
+
+def test_resolve_client_estimate_response_email_match_is_case_insensitive(test_db):
+    bid = _make_awaiting_client_ticket("Mario.Rossi@Example.com")
+    assert db.resolve_client_estimate_response(bid, "reject", client_email="mario.rossi@example.com")
+
+
+def test_resolve_client_estimate_response_refuses_other_email(test_db):
+    bid = _make_awaiting_client_ticket("victim@example.com")
+    assert not db.resolve_client_estimate_response(bid, "reject", client_email="attacker@example.com")
+    assert db.get_all_tickets()[0]["ticket_status"] == "awaiting_client"
+
+
+def test_resolve_client_estimate_response_refuses_ticket_without_email(test_db):
+    # A ticket with no email on file can't be "owned" by anyone — an empty
+    # verified email must never match it.
+    bid = _make_awaiting_client_ticket("")
+    assert not db.resolve_client_estimate_response(bid, "reject", client_email="")
+
+
+def test_find_tickets_by_email_is_case_insensitive_and_ignores_blank(test_db):
+    _make_awaiting_client_ticket("Mario@Example.com")
+    assert len(db.find_tickets_by_email("mario@example.com")) == 1
+    assert db.find_tickets_by_email("   ") == []
 
 
 def test_create_alert_with_booking_id_sets_blocked(test_db):
@@ -287,12 +323,17 @@ def test_get_business_analytics_only_counts_closed_with_ticket_log(test_db):
     assert biz["closed_count"] == 0
 
     # A properly-closed ticket (via the real flow) IS counted, with revenue/hours.
-    bid = db.create_pending_booking(model="IRIS", date_str="2026-08-01", time_str="10:00", ticket_phase="survey", quantity=2)
+    bid = db.create_pending_booking(
+        model="IRIS", date_str="2026-08-01", time_str="10:00", ticket_phase="survey", quantity=2,
+        client_email="c1@example.com",
+    )
     db.resolve_booking(bid, "approved", "manager1")
     db.claim_booking(bid, "inst_a")
     db.save_survey_measurements(bid, 150, 100, 8, "standard", changed_by="inst_a")
     db.resolve_survey_estimate(bid, 700.0, "manager1")
-    db.resolve_client_estimate_response(bid, "accept", "2026-08-10", "11:00", changed_by="c1")
+    db.resolve_client_estimate_response(
+        bid, "accept", "2026-08-10", "11:00", changed_by="c1", client_email="c1@example.com",
+    )
     db.claim_booking(bid, "inst_b")
     job_id = db.create_job_completion("inst_b", "done", booking_id=bid)
     db.resolve_job_completion(job_id, "approved", "manager1")

@@ -28,7 +28,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from backend.assistant import initialize_agent, TurnResult
 from backend.company_config import COMPANY_CONTEXT
 from backend.llm_provider import OPENROUTER_MODELS, DEFAULT_MODEL, calculate_cost
-from backend.log_context import username_var
+from backend.log_context import username_var, verified_client_email_var
 from backend.qa_cache import submit_for_review as qa_submit, lookup as _cache_lookup
 from backend.database import get_config, set_config, log_usage, get_product, get_inventory, get_ticket_log, get_costs, ticket_code
 
@@ -283,10 +283,21 @@ _TR: dict[str, dict[str, str]] = {
 
     # Client booking form — synthetic message sent into the chat on submit
     "pending_estimate_title": {"English": "Check a pending estimate", "Italiano": "Controlla un preventivo in attesa", "Deutsch": "Ausstehendes Angebot prüfen", "Español": "Consultar un presupuesto pendiente", "Slovenščina": "Preveri čakajočo ponudbo"},
-    "pending_estimate_hint": {"English": "Enter the email you used for your request to check for a priced estimate awaiting your response.", "Italiano": "Inserisci l'email usata per la richiesta per controllare se c'è un preventivo in attesa di risposta.", "Deutsch": "Geben Sie die E-Mail-Adresse Ihrer Anfrage ein, um ein auf Ihre Antwort wartendes Angebot zu prüfen.", "Español": "Introduce el correo que usaste para tu solicitud para consultar si hay un presupuesto esperando tu respuesta.", "Slovenščina": "Vnesite e-pošto, ki ste jo uporabili za zahtevo, da preverite, ali čaka ponudba na vaš odgovor."},
+    # Client email verification (one-time code) — required only for existing tickets
+    "verify_email_hint": {"English": "To view or respond to your tickets, first verify your email — we'll send you a 6-digit code.", "Italiano": "Per vedere o rispondere ai tuoi ticket, verifica prima la tua email: ti invieremo un codice di 6 cifre.", "Deutsch": "Um Ihre Tickets zu sehen oder zu beantworten, bestätigen Sie zuerst Ihre E-Mail — wir senden Ihnen einen 6-stelligen Code.", "Español": "Para ver o responder a tus tickets, verifica primero tu correo: te enviaremos un código de 6 dígitos.", "Slovenščina": "Za ogled ali odgovor na vaše zahtevke najprej potrdite e-pošto — poslali vam bomo 6-mestno kodo."},
+    "verify_send_code": {"English": "Send code", "Italiano": "Invia codice", "Deutsch": "Code senden", "Español": "Enviar código", "Slovenščina": "Pošlji kodo"},
+    "verify_code_label": {"English": "Verification code", "Italiano": "Codice di verifica", "Deutsch": "Bestätigungscode", "Español": "Código de verificación", "Slovenščina": "Potrditvena koda"},
+    "verify_button": {"English": "Verify", "Italiano": "Verifica", "Deutsch": "Bestätigen", "Español": "Verificar", "Slovenščina": "Potrdi"},
+    "verify_code_sent": {"English": "We sent a code to {email}. It expires in 10 minutes.", "Italiano": "Abbiamo inviato un codice a {email}. Scade tra 10 minuti.", "Deutsch": "Wir haben einen Code an {email} gesendet. Er läuft in 10 Minuten ab.", "Español": "Hemos enviado un código a {email}. Caduca en 10 minutos.", "Slovenščina": "Kodo smo poslali na {email}. Poteče v 10 minutah."},
+    "verify_demo_code": {"English": "Demo mode — email is not configured. Your code is: {code}", "Italiano": "Modalità demo — email non configurata. Il tuo codice è: {code}", "Deutsch": "Demo-Modus — E-Mail ist nicht konfiguriert. Ihr Code lautet: {code}", "Español": "Modo demo — el correo no está configurado. Tu código es: {code}", "Slovenščina": "Demo način — e-pošta ni nastavljena. Vaša koda je: {code}"},
+    "verify_cooldown": {"English": "Please wait a minute before requesting a new code.", "Italiano": "Attendi un minuto prima di richiedere un nuovo codice.", "Deutsch": "Bitte warten Sie eine Minute, bevor Sie einen neuen Code anfordern.", "Español": "Espera un minuto antes de solicitar un nuevo código.", "Slovenščina": "Pred zahtevo za novo kodo počakajte minuto."},
+    "verify_invalid_email": {"English": "Please enter a valid email address.", "Italiano": "Inserisci un indirizzo email valido.", "Deutsch": "Bitte geben Sie eine gültige E-Mail-Adresse ein.", "Español": "Introduce una dirección de correo válida.", "Slovenščina": "Vnesite veljaven e-poštni naslov."},
+    "verify_email_unavailable": {"English": "Email verification is currently unavailable. Please contact us directly.", "Italiano": "La verifica email non è al momento disponibile. Contattaci direttamente.", "Deutsch": "Die E-Mail-Bestätigung ist derzeit nicht verfügbar. Bitte kontaktieren Sie uns direkt.", "Español": "La verificación por correo no está disponible en este momento. Contáctanos directamente.", "Slovenščina": "Potrjevanje e-pošte trenutno ni na voljo. Obrnite se neposredno na nas."},
+    "verify_failed": {"English": "Invalid or expired code.", "Italiano": "Codice non valido o scaduto.", "Deutsch": "Ungültiger oder abgelaufener Code.", "Español": "Código no válido o caducado.", "Slovenščina": "Neveljavna ali potekla koda."},
+    "verified_as": {"English": "Verified as {email}", "Italiano": "Verificato come {email}", "Deutsch": "Bestätigt als {email}", "Español": "Verificado como {email}", "Slovenščina": "Potrjeno kot {email}"},
+    "verify_change_email": {"English": "Use a different email", "Italiano": "Usa un'altra email", "Deutsch": "Andere E-Mail verwenden", "Español": "Usar otro correo", "Slovenščina": "Uporabi drug e-naslov"},
     "no_pending_estimates": {"English": "No estimates awaiting your response were found for this email.", "Italiano": "Nessun preventivo in attesa di risposta trovato per questa email.", "Deutsch": "Für diese E-Mail wurden keine auf Antwort wartenden Angebote gefunden.", "Español": "No se encontraron presupuestos pendientes de respuesta para este correo.", "Slovenščina": "Za to e-pošto ni bilo najdenih ponudb, ki čakajo na odgovor."},
     "installation_status_title": {"English": "Check installation status", "Italiano": "Controlla lo stato dell'installazione", "Deutsch": "Installationsstatus prüfen", "Español": "Consultar el estado de la instalación", "Slovenščina": "Preveri stanje inštalacije"},
-    "installation_status_hint": {"English": "Enter the email you used for your request to check for updates on a completed installation.", "Italiano": "Inserisci l'email usata per la richiesta per controllare gli aggiornamenti su un'installazione completata.", "Deutsch": "Geben Sie die E-Mail-Adresse Ihrer Anfrage ein, um Updates zu einer abgeschlossenen Installation zu prüfen.", "Español": "Introduce el correo que usaste para tu solicitud para consultar novedades sobre una instalación completada.", "Slovenščina": "Vnesite e-pošto, ki ste jo uporabili za zahtevo, da preverite posodobitve o zaključeni inštalaciji."},
     "no_installation_updates": {"English": "No installation updates were found for this email.", "Italiano": "Nessun aggiornamento sull'installazione trovato per questa email.", "Deutsch": "Für diese E-Mail wurden keine Installations-Updates gefunden.", "Español": "No se encontraron novedades de instalación para este correo.", "Slovenščina": "Za to e-pošto ni bilo najdenih posodobitev o inštalaciji."},
     "install_outcome_approved": {"English": "Completed", "Italiano": "Completata", "Deutsch": "Abgeschlossen", "Español": "Completada", "Slovenščina": "Zaključeno"},
     "install_outcome_rejected": {"English": "In progress", "Italiano": "In corso", "Deutsch": "In Bearbeitung", "Español": "En curso", "Slovenščina": "V teku"},
@@ -1123,6 +1134,18 @@ def require_auth(allowed_roles: list[str] = None):
     if allowed_roles and role not in allowed_roles:
         st.error(t("access_denied").format(roles=", ".join(allowed_roles)))
         st.stop()
+    bind_request_context()
+
+
+def bind_request_context() -> None:
+    """
+    Copies this session's identity into the ContextVars tools read
+    (username_var, verified_client_email_var). Called on every page run via
+    require_auth(), so direct tool calls from dashboard buttons get the right
+    identity too — not only agent turns.
+    """
+    username_var.set(st.session_state.get("username", "unknown"))
+    verified_client_email_var.set(st.session_state.get("verified_client_email", ""))
 
 
 # ── agent cache ───────────────────────────────────────────────────────────────
@@ -1521,30 +1544,87 @@ def render_booking_form(agent, selected_model: str) -> None:
             handle_user_turn(synthetic_message, agent, selected_model, is_synthetic=True)
 
 
+_VERIFY_ERROR_KEYS = {
+    "cooldown":          "verify_cooldown",
+    "invalid_email":     "verify_invalid_email",
+    "email_unavailable": "verify_email_unavailable",
+}
+
+
+def _render_client_email_verification(key_prefix: str) -> str:
+    """
+    Returns the session's verified client email — or, if there is none yet,
+    renders the one-time-code form and returns "". Client sessions are
+    anonymous (login.py's "Continue as Client" collects nothing), so this is
+    what proves ownership before any existing ticket is shown or changed.
+    The result lives in st.session_state["verified_client_email"], so
+    verifying in one panel unlocks the others and the chat tools too.
+    """
+    from backend import client_auth
+
+    verified = st.session_state.get("verified_client_email", "")
+    if verified:
+        col_info, col_change = st.columns([3, 2])
+        col_info.caption(t("verified_as").format(email=verified))
+        if col_change.button(t("verify_change_email"), key=_k(f"{key_prefix}_verify_change")):
+            for key in ("verified_client_email", "verify_pending_email", "verify_demo_code"):
+                st.session_state.pop(key, None)
+            bind_request_context()
+            st.rerun()
+        return verified
+
+    st.caption(t("verify_email_hint"))
+    email = st.text_input(
+        t("booking_form_email"), key=_k(f"{key_prefix}_verify_email"), placeholder="you@example.com",
+    )
+    if st.button(t("verify_send_code"), key=_k(f"{key_prefix}_verify_send")):
+        result = client_auth.request_code(email)
+        if result.status in ("sent", "demo"):
+            st.session_state["verify_pending_email"] = client_auth.normalize_email(email)
+            st.session_state["verify_demo_code"] = result.demo_code
+        else:
+            st.error(t(_VERIFY_ERROR_KEYS[result.status]))
+
+    pending_email = st.session_state.get("verify_pending_email")
+    if pending_email:
+        demo_code = st.session_state.get("verify_demo_code")
+        if demo_code:
+            st.warning(t("verify_demo_code").format(code=demo_code))
+        else:
+            st.info(t("verify_code_sent").format(email=pending_email))
+        code = st.text_input(t("verify_code_label"), key=_k(f"{key_prefix}_verify_code"), max_chars=6)
+        if st.button(t("verify_button"), key=_k(f"{key_prefix}_verify_submit"), type="primary"):
+            if client_auth.verify_code(pending_email, code):
+                st.session_state["verified_client_email"] = pending_email
+                st.session_state.pop("verify_pending_email", None)
+                st.session_state.pop("verify_demo_code", None)
+                bind_request_context()
+                st.rerun()
+            else:
+                st.error(t("verify_failed"))
+    return ""
+
+
 def render_client_pending_estimates() -> None:
     """
     Lets a client accept/reject a priced estimate with a couple of clicks,
     instead of having to return to the chat and describe what they want in
-    free text. Client sessions carry no stored identity (see login.py —
-    "Continue as Client" never collects an email), so — same as the
-    conversational find_my_tickets_by_email_tool equivalent — this looks
-    tickets up by an email the client types in here.
+    free text. Requires a verified email (_render_client_email_verification)
+    — the same ownership rule find_my_tickets_by_email_tool and
+    respond_to_estimate_tool enforce.
 
     Calls respond_to_estimate_tool directly (bypassing the LLM agent),
     the same direct-tool-call pattern the manager dashboard uses for
     Approve/Reject actions.
     """
     with st.expander(t("pending_estimate_title")):
-        email = st.text_input(
-            t("booking_form_email"), key=_k("estimate_lookup_email"), placeholder="you@example.com",
-        )
-        if not email or "@" not in email:
-            st.caption(t("pending_estimate_hint"))
+        email = _render_client_email_verification("estimate")
+        if not email:
             return
 
         from backend.database import find_tickets_by_email
 
-        tickets = find_tickets_by_email(email.strip(), ticket_status="awaiting_client")
+        tickets = find_tickets_by_email(email, ticket_status="awaiting_client")
         if not tickets:
             st.caption(t("no_pending_estimates"))
             return
@@ -1616,16 +1696,13 @@ def render_client_installation_status() -> None:
     outcomes, not just the positive one.
     """
     with st.expander(t("installation_status_title")):
-        email = st.text_input(
-            t("booking_form_email"), key=_k("install_status_lookup_email"), placeholder="you@example.com",
-        )
-        if not email or "@" not in email:
-            st.caption(t("installation_status_hint"))
+        email = _render_client_email_verification("install_status")
+        if not email:
             return
 
         from backend.database import find_tickets_by_email, get_job_completions
 
-        tickets = find_tickets_by_email(email.strip())
+        tickets = find_tickets_by_email(email)
         ticket_by_id = {tk["id"]: tk for tk in tickets}
         if not ticket_by_id:
             st.caption(t("no_installation_updates"))
@@ -1657,7 +1734,7 @@ def render_client_installation_status() -> None:
 
 
 def _stream_resume(agent, decision: str, selected_model: str):
-    username_var.set(st.session_state.get("username", "unknown"))
+    bind_request_context()
     result = TurnResult()
     with st.chat_message("assistant", avatar=_chat_avatar("assistant")):
         raw_text = st.write_stream(agent.stream_resume(decision, _get("thread_id"), result))
@@ -1676,7 +1753,7 @@ def handle_user_turn(user_prompt: str, agent, selected_model: str, is_synthetic:
     cache) and the booking-intent heuristic below (a synthetic booking
     submission would otherwise re-trigger "show the booking form").
     """
-    username_var.set(st.session_state.get("username", "unknown"))
+    bind_request_context()
 
     if _get("total_requests", 0) >= 50:
         st.error(t("session_limit_reached"))

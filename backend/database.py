@@ -377,6 +377,20 @@ def init_db(reset: bool = False) -> None:
         """
     )
 
+    # One-time email verification codes for client sessions (backend/client_auth.py).
+    # One active code per email; only a hash of the code is stored.
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS client_verification_codes (
+            email TEXT PRIMARY KEY,
+            code_hash TEXT NOT NULL,
+            expires_at REAL NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL
+        )
+        """
+    )
+
     # Job completion reports submitted by installers, pending manager approval.
     cursor.execute(
         """
@@ -739,6 +753,7 @@ def reset_operational_data() -> None:
     conn.execute("DELETE FROM installer_alerts")
     conn.execute("DELETE FROM job_completions")
     conn.execute("DELETE FROM qa_pending")
+    conn.execute("DELETE FROM client_verification_codes")
     conn.commit()
     conn.close()
 
@@ -1221,6 +1236,8 @@ def resolve_client_estimate_response(
     new_date_str: Optional[str] = None,
     new_time_str: Optional[str] = None,
     changed_by: str = "",
+    *,
+    client_email: str,
 ) -> bool:
     """
     Records the client's accept/reject decision on a priced estimate.
@@ -1231,6 +1248,9 @@ def resolve_client_estimate_response(
     to claim. Reject: marks the ticket cancelled (distinct from 'rejected',
     which means the manager rejected the initial survey request — this is
     the client declining a priced estimate, a different point in the flow).
+
+    client_email must match the ticket's own email (case-insensitive) — the
+    ownership check is enforced here too, not only by the calling tool.
     """
     if response == "accept":
         conn = get_connection()
@@ -1242,8 +1262,9 @@ def resolve_client_estimate_response(
                 date_str = ?, time_str = ?,
                 ticket_phase = 'installation', ticket_status = 'open'
             WHERE id = ? AND ticket_status = 'awaiting_client'
+              AND lower(client_email) = lower(?) AND client_email != ''
             """,
-            (new_date_str, new_time_str, booking_id),
+            (new_date_str, new_time_str, booking_id, client_email),
         )
         new_status = "open"
     else:
@@ -1253,8 +1274,9 @@ def resolve_client_estimate_response(
             UPDATE pending_bookings
             SET client_estimate_response = 'rejected', ticket_status = 'cancelled'
             WHERE id = ? AND ticket_status = 'awaiting_client'
+              AND lower(client_email) = lower(?) AND client_email != ''
             """,
-            (booking_id,),
+            (booking_id, client_email),
         )
         new_status = "cancelled"
     updated = cursor.rowcount > 0
@@ -1266,22 +1288,38 @@ def resolve_client_estimate_response(
 
 
 def find_tickets_by_email(client_email: str, ticket_status: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Finds a client's own tickets by email, optionally filtered by ticket_status."""
+    """
+    Finds tickets by client email (case-insensitive), optionally filtered by
+    ticket_status. Callers must pass a *verified* email — this does no
+    ownership check of its own.
+    """
+    if not client_email.strip():
+        return []
     conn = get_connection()
     if ticket_status:
         rows = conn.execute(
             f"SELECT {_BOOKING_COLUMNS} FROM pending_bookings "
-            "WHERE client_email = ? AND ticket_status = ? ORDER BY created_at DESC",
-            (client_email, ticket_status),
+            "WHERE lower(client_email) = lower(?) AND ticket_status = ? ORDER BY created_at DESC",
+            (client_email.strip(), ticket_status),
         ).fetchall()
     else:
         rows = conn.execute(
             f"SELECT {_BOOKING_COLUMNS} FROM pending_bookings "
-            "WHERE client_email = ? ORDER BY created_at DESC",
-            (client_email,),
+            "WHERE lower(client_email) = lower(?) ORDER BY created_at DESC",
+            (client_email.strip(),),
         ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_booking(booking_id: int) -> Optional[Dict[str, Any]]:
+    """Returns one ticket by id, or None."""
+    conn = get_connection()
+    row = conn.execute(
+        f"SELECT {_BOOKING_COLUMNS} FROM pending_bookings WHERE id = ?", (booking_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def ticket_code(ticket_id: int) -> str:
