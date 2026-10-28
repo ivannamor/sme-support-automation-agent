@@ -5,7 +5,10 @@ deterministic fake embeddings model for testing backend/qa_cache.py without
 real OpenAI calls.
 """
 
+import datetime
 import hashlib
+import math
+import os
 import sys
 from pathlib import Path
 from typing import List
@@ -17,6 +20,33 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend import database
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _disable_tracing():
+    """
+    Keeps the suite fully offline: a developer's .env may enable LangSmith
+    tracing, which would otherwise upload a run for every graph/LLM call the
+    tests make.
+    """
+    keys = ("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING")
+    saved = {k: os.environ.get(k) for k in keys}
+    for k in keys:
+        os.environ[k] = "false"
+    yield
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
+def future_date(days: int = 30) -> str:
+    """
+    A YYYY-MM-DD date safely in the future. Use it wherever the code under
+    test rejects past dates, so the test can't silently expire.
+    """
+    return (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
 
 
 @pytest.fixture
@@ -88,7 +118,11 @@ class FakeEmbeddings(Embeddings):
 
     def _vector(self, text: str) -> list[float]:
         digest = hashlib.sha256(text.strip().lower().encode("utf-8")).digest()
-        return [b / 255.0 for b in digest[: self.DIMENSIONS]]
+        raw = [b / 255.0 for b in digest[: self.DIMENSIONS]]
+        # Unit-length, like real OpenAI embeddings — keeps Chroma's relevance
+        # scores within [0, 1].
+        norm = math.sqrt(sum(x * x for x in raw)) or 1.0
+        return [x / norm for x in raw]
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [self._vector(t) for t in texts]

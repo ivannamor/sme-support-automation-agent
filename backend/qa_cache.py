@@ -7,7 +7,7 @@ the cache and avoid retriggering the full RAG pipeline.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -136,7 +136,7 @@ def approve(pending_id: int, approved_by: str = "manager") -> bool:
             metadatas=[{
                 "answer":      answer,
                 "approved_by": approved_by,
-                "approved_at": datetime.utcnow().isoformat(),
+                "approved_at": datetime.now(timezone.utc).isoformat(),
             }],
         )
     except Exception as exc:
