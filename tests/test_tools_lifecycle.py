@@ -8,6 +8,7 @@ inventory HTTP API) so no test makes a real network/API call.
 import tools
 from backend.log_context import username_var
 from backend.database import get_connection, ticket_code
+from tests.conftest import future_date
 
 
 class _FakeInvokeLLM:
@@ -148,7 +149,7 @@ def test_request_site_survey_tool_creates_new_ticket(test_db, monkeypatch):
     monkeypatch.setattr(tools, "_geocode_location", lambda addr: (45.0, 9.0, addr))
     username_var.set("client1")
     result = tools.request_site_survey_tool.invoke({
-        "model": "IRIS", "quantity": 1, "date_str": "2026-08-01", "time_str": "10:00",
+        "model": "IRIS", "quantity": 1, "date_str": future_date(), "time_str": "10:00",
         "client_name": "Mario Rossi", "client_email": "mario@example.com",
         "client_phone": "3331234567", "client_address": "Via Roma 1, Udine",
     })
@@ -166,7 +167,7 @@ def test_request_site_survey_tool_survives_geocode_failure(test_db, monkeypatch)
     monkeypatch.setattr(tools, "_geocode_location", _boom)
     username_var.set("client1")
     result = tools.request_site_survey_tool.invoke({
-        "model": "IRIS", "quantity": 1, "date_str": "2026-08-01", "time_str": "10:00",
+        "model": "IRIS", "quantity": 1, "date_str": future_date(), "time_str": "10:00",
         "client_name": "Mario Rossi", "client_email": "mario@example.com",
         "client_phone": "3331234567", "client_address": "Nowhere, Nowhere",
     })
@@ -180,11 +181,27 @@ def test_request_site_survey_tool_survives_geocode_failure(test_db, monkeypatch)
 def test_request_site_survey_tool_rejects_bad_quantity(test_db):
     username_var.set("client1")
     result = tools.request_site_survey_tool.invoke({
-        "model": "IRIS", "quantity": 0, "date_str": "2026-08-01", "time_str": "10:00",
+        "model": "IRIS", "quantity": 0, "date_str": future_date(), "time_str": "10:00",
         "client_name": "Mario Rossi", "client_email": "mario@example.com",
         "client_phone": "3331234567", "client_address": "Via Roma 1",
     })
-    assert "Error" in result
+    assert "quantity must be at least 1" in result
+
+
+def test_request_site_survey_tool_rejects_past_date(test_db, monkeypatch):
+    monkeypatch.setattr(tools, "_geocode_location", lambda addr: (45.0, 9.0, addr))
+    username_var.set("client1")
+    yesterday = future_date(days=-1)
+    result = tools.request_site_survey_tool.invoke({
+        "model": "IRIS", "quantity": 1, "date_str": yesterday, "time_str": "10:00",
+        "client_name": "Mario Rossi", "client_email": "mario@example.com",
+        "client_phone": "3331234567", "client_address": "Via Roma 1, Udine",
+    })
+    assert "is in the past" in result
+    conn = get_connection()
+    count = conn.execute("SELECT COUNT(*) FROM pending_bookings").fetchone()[0]
+    conn.close()
+    assert count == 0  # nothing persisted for a rejected request
 
 
 # ── extract_booking_fields (mocks the LLM structured-output call) ────────────
