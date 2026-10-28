@@ -26,6 +26,7 @@ import logging
 import datetime
 from pathlib import Path
 from typing import Literal, Optional, Tuple
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import requests
@@ -43,7 +44,7 @@ from googleapiclient.discovery import build
 from rag.rag_engine import get_assistant_response
 from backend.database import (
     create_pending_booking, create_pending_reservation, create_alert,
-    get_pending_reservations, resolve_reservation,
+    get_pending_reservations, resolve_reservation, reopen_reservation,
     get_product, get_costs, update_cost, VALID_COST_KEYS, GLASS_TYPES,
     create_job_completion, get_booking_client_email,
     get_pending_bookings, resolve_booking,
@@ -91,7 +92,6 @@ CREDENTIALS_PATH = SECRETS_DIR / "credentials.json"
 TOKEN_PATH = SECRETS_DIR / "token.json"
 
 API_URL = get_secret("API_URL", "http://127.0.0.1:8000")
-INVENTORY_API_KEY = get_secret("INVENTORY_API_KEY", "")
 INSTALLER_BASE_LOCATION = get_secret("INSTALLER_BASE_LOCATION", "Milan, Italy")
 INSTALLER_BASE_LAT = get_secret("INSTALLER_BASE_LAT")
 INSTALLER_BASE_LON = get_secret("INSTALLER_BASE_LON")
@@ -334,6 +334,23 @@ def inventory_api_tool(action: str, model: str, quantity: int = 1) -> str:
     - 'backorder' to register a backorder request
     """
 
+    _, message = _inventory_request(action, model, quantity)
+    return message
+
+
+def _format_api_error(detail) -> str:
+    # FastAPI validation errors (422) carry a list of {"loc", "msg", ...} dicts.
+    if isinstance(detail, list):
+        return "; ".join(str(err.get("msg", err)) if isinstance(err, dict) else str(err) for err in detail)
+    return str(detail)
+
+
+def _inventory_request(action: str, model: str, quantity: int = 1) -> Tuple[bool, str]:
+    """
+    Calls the inventory API and returns (ok, message), so callers such as
+    approve_reservation_tool branch on success instead of string-matching
+    the message text.
+    """
     action = action.lower().strip()
     model = model.upper().strip()
     start_time = time.time()
@@ -341,28 +358,28 @@ def inventory_api_tool(action: str, model: str, quantity: int = 1) -> str:
     allowed_actions = {"get", "take", "backorder"}
 
     if action not in allowed_actions:
-        return (
+        return False, (
             f"Inventory Error: unsupported action '{action}'. "
             "Use 'get', 'take', or 'backorder'."
         )
 
     if quantity < 1:
-        return "Inventory Error: quantity must be at least 1."
+        return False, "Inventory Error: quantity must be at least 1."
 
     try:
-        headers = {"X-API-Key": INVENTORY_API_KEY} if INVENTORY_API_KEY else {}
+        # Read per call: run.py may inject a per-session key after import.
+        headers = {"X-API-Key": get_secret("INVENTORY_API_KEY", "")}
 
         if action == "get":
             response = requests.get(
-                f"{API_URL}/inventory/{model}",
+                f"{API_URL}/inventory/{quote(model, safe='')}",
                 headers=headers,
                 timeout=5,
             )
         else:
-            endpoint = f"{API_URL}/inventory/{action}"
             response = requests.post(
-                endpoint,
-                params={"model": model, "quantity": quantity},
+                f"{API_URL}/inventory/{action}",
+                json={"model": model, "quantity": quantity},
                 headers=headers,
                 timeout=5,
             )
@@ -375,31 +392,31 @@ def inventory_api_tool(action: str, model: str, quantity: int = 1) -> str:
         data = response.json()
 
         if action == "get":
-            return str(data)
+            return True, str(data)
 
-        return data.get("message", "Operation successful.")
+        return True, data.get("message", "Operation successful.")
 
     except ConnectionError:
         logger.error("INVENTORY_CONN_ERROR: API server is down.")
-        return "Error: Connection to inventory system failed. Ensure api_server.py is running."
+        return False, "Error: Connection to inventory system failed. Ensure api_server.py is running."
 
     except Timeout:
         logger.error(f"INVENTORY_TIMEOUT: Request for {model} timed out.")
-        return "Error: Inventory system timed out."
+        return False, "Error: Inventory system timed out."
 
     except HTTPError as exc:
         status_code = exc.response.status_code
         try:
-            error_detail = exc.response.json().get("detail", "Unknown error")
+            error_detail = _format_api_error(exc.response.json().get("detail", "Unknown error"))
         except Exception:
             error_detail = "API response error"
 
         logger.warning(f"INVENTORY_HTTP_{status_code}: {error_detail}")
-        return f"Inventory Error: {error_detail}"
+        return False, f"Inventory Error: {error_detail}"
 
     except Exception as exc:
         logger.error(f"INVENTORY_UNEXPECTED_ERROR: {str(exc)}", exc_info=True)
-        return "Error: An unexpected error occurred in the inventory tool."
+        return False, "Error: An unexpected error occurred in the inventory tool."
 
 
 # ============================================================
@@ -1064,13 +1081,16 @@ def approve_reservation_tool(reservation_id: int) -> str:
     if not reservation:
         return f"Reservation #{reservation_id} not found among pending requests."
 
-    take_result = inventory_api_tool.invoke({
-        "action": "take", "model": reservation["model"], "quantity": reservation["quantity"],
-    })
-    if "Error" in take_result:
+    # Claim first: resolve_reservation only succeeds while the row is still
+    # 'pending', so of two concurrent approvals exactly one deducts stock.
+    if not resolve_reservation(reservation_id, "approved", username_var.get()):
+        return f"Reservation #{reservation_id} not found among pending requests."
+
+    ok, take_result = _inventory_request("take", reservation["model"], reservation["quantity"])
+    if not ok:
+        reopen_reservation(reservation_id)
         return f"Could not deduct stock for reservation #{reservation_id}: {take_result}"
 
-    resolve_reservation(reservation_id, "approved", username_var.get())
     logger.info(f"RESERVATION_APPROVED: id={reservation_id} by={username_var.get()}")
     return f"Reservation #{reservation_id} ({reservation['quantity']}× {reservation['model']}) approved. {take_result}"
 

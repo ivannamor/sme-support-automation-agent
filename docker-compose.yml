@@ -6,7 +6,8 @@ services:
       - .env
     ports:
       - "8501:8501"   # Streamlit UI
-      - "8000:8000"   # FastAPI inventory API
+      # The inventory API (port 8000) is deliberately not published: only the
+      # assistant inside this container calls it, over loopback.
     volumes:
       - ./db:/app/db               # SQLite (company.db) + Chroma vector store
       - ./logs:/app/logs

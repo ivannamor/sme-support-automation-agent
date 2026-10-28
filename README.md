@@ -138,8 +138,13 @@ DEMO_MODE=false
 
 # Optional — inventory API / installer routing
 API_URL=http://127.0.0.1:8000
+# Shared secret between the assistant and the inventory API. The API refuses
+# every request without it. run.py generates one per session when unset; set
+# it explicitly when you start the two services separately.
 INVENTORY_API_KEY=...
-ALLOWED_ORIGINS=...
+# Interface the inventory API binds to (loopback by default). Use 0.0.0.0
+# only when the API runs in its own container.
+API_HOST=127.0.0.1
 INSTALLER_BASE_LABEL=...
 INSTALLER_BASE_LAT=...
 INSTALLER_BASE_LON=...
@@ -199,7 +204,7 @@ Notes:
 .venv\Scripts\python.exe run.py
 ```
 
-Or run the two services separately:
+Or run the two services separately (requires `INVENTORY_API_KEY` in `.env`):
 
 ```powershell
 .venv\Scripts\python.exe app\api_server.py
@@ -263,7 +268,8 @@ they only need to be re-run when source content changes — not on every
 container restart.
 
 - Streamlit UI: `http://localhost:8501`
-- Inventory API: `http://127.0.0.1:8000`
+- Inventory API: not published to the host — only the assistant inside the
+  container calls it.
 
 **Notes:**
 - `API_URL` (used by `tools.py` to reach the inventory API) defaults to
@@ -276,8 +282,9 @@ container restart.
   or restart them separately), split `docker-compose.yml` into two services
   from the same image, overriding `command:` to run
   `uvicorn app.api_server:app --host 0.0.0.0 --port 8000` and
-  `streamlit run app/app.py` respectively, and point `API_URL` at the other
-  service's container name (e.g. `http://api:8000`).
+  `streamlit run app/app.py` respectively, point `API_URL` at the other
+  service's container name (e.g. `http://api:8000`), and give both the same
+  `INVENTORY_API_KEY`. Keep port 8000 on the internal network only.
 
 ## Testing
 
