@@ -51,9 +51,9 @@ from backend.database import (
     get_approved_bookings, claim_booking, release_booking,
     ticket_code, upsert_client, save_survey_measurements, resolve_survey_estimate,
     reject_survey_report, resolve_client_estimate_response, find_tickets_by_email,
-    get_all_tickets, update_ticket_details, get_inventory,
+    get_all_tickets, update_ticket_details, get_inventory, get_booking,
 )
-from backend.log_context import username_var
+from backend.log_context import username_var, verified_client_email_var
 from backend.email_utils import send_manager_alert
 from backend.llm_provider import get_llm
 from backend.company_config import COMPANY_CONTEXT
@@ -1129,6 +1129,12 @@ class AlertInput(BaseModel):
     )
 
 
+def _is_assigned_to_caller(booking_id: int) -> bool:
+    """True if the ticket exists and is assigned to the calling installer."""
+    booking = get_booking(booking_id)
+    return bool(booking) and booking.get("assigned_to") == username_var.get()
+
+
 @tool(args_schema=AlertInput)
 def send_alert_to_manager_tool(message: str, job_reference: str = "", booking_id: int = 0) -> str:
     """
@@ -1140,6 +1146,8 @@ def send_alert_to_manager_tool(message: str, job_reference: str = "", booking_id
     before being delivered to the manager.
     """
     sender = username_var.get()
+    if booking_id and not _is_assigned_to_caller(booking_id):
+        return f"Alert Error: {ticket_code(booking_id)} is not assigned to you."
 
     try:
         llm = get_llm(temperature=0, max_tokens=300)
@@ -1335,6 +1343,8 @@ def complete_job_tool(notes: str, client_email: str = "", booking_id: int = 0) -
     automatically sent to the client.
     """
     installer = username_var.get()
+    if booking_id and not _is_assigned_to_caller(booking_id):
+        return f"Job Completion Error: {ticket_code(booking_id)} is not assigned to you."
 
     try:
         llm = get_llm(temperature=0, max_tokens=350)
@@ -2321,17 +2331,28 @@ def reject_survey_estimate_tool(booking_id: int) -> str:
 
 # ── client response to a priced estimate ─────────────────────────────────────
 
-class FindMyTicketsInput(BaseModel):
-    client_email: str = Field(description="The client's own email address, used to find their tickets.")
+# Ticket ownership comes from the session's verified email (one-time code,
+# backend/client_auth.py) — never from an LLM-supplied argument, which the
+# user can steer by prompting.
+_CLIENT_NOT_VERIFIED = (
+    "Client email not verified. To see or respond to their tickets, the client "
+    "must first verify their email in the 'Verify your email' box inside the "
+    "estimate or installation-status panel at the top of this page (it sends a "
+    "one-time code). Do not ask them to type their email in the chat instead."
+)
 
 
-@tool(args_schema=FindMyTicketsInput)
-def find_my_tickets_by_email_tool(client_email: str) -> str:
+@tool
+def find_my_tickets_by_email_tool() -> str:
     """
-    Finds a client's own tickets that are awaiting their response to a priced
-    estimate. Use this when a client wants to accept/reject an estimate but
-    doesn't have their ticket code handy — ask for their email first.
+    Finds the client's own tickets that are awaiting their response to a
+    priced estimate, using the email the client verified in this session.
+    Use this when a client wants to accept/reject an estimate but doesn't have
+    their ticket code handy.
     """
+    client_email = verified_client_email_var.get().strip().lower()
+    if not client_email:
+        return _CLIENT_NOT_VERIFIED
     tickets = find_tickets_by_email(client_email, ticket_status="awaiting_client")
     if not tickets:
         return f"No tickets awaiting a response were found for {client_email}."
@@ -2364,15 +2385,27 @@ def respond_to_estimate_tool(
     if response not in ("accept", "reject"):
         return "Response Error: response must be 'accept' or 'reject'."
 
-    pending = [b for b in get_pending_bookings(status="approved") if b["id"] == booking_id]
-    booking = pending[0] if pending else None
-    if not booking or booking.get("ticket_status") != "awaiting_client":
-        return f"{ticket_code(booking_id)} is not currently awaiting a client response."
+    client_email = verified_client_email_var.get().strip().lower()
+    if not client_email:
+        return _CLIENT_NOT_VERIFIED
 
-    client_actor = booking.get("client_email") or "client"
+    booking = get_booking(booking_id)
+    # Someone else's ticket gets the same answer as a missing one, so ticket
+    # ids can't be probed for existence.
+    if (
+        not booking
+        or booking.get("status") != "approved"
+        or booking.get("ticket_status") != "awaiting_client"
+        or (booking.get("client_email") or "").strip().lower() != client_email
+    ):
+        return f"{ticket_code(booking_id)} is not currently awaiting a response from you."
+
+    client_actor = client_email
 
     if response == "reject":
-        resolve_client_estimate_response(booking_id, "reject", changed_by=client_actor)
+        resolve_client_estimate_response(
+            booking_id, "reject", changed_by=client_actor, client_email=client_email,
+        )
         logger.info(f"ESTIMATE_REJECTED_BY_CLIENT: id={booking_id}")
         return f"Estimate for {ticket_code(booking_id)} has been declined and the ticket is now cancelled."
 
@@ -2396,7 +2429,10 @@ def respond_to_estimate_tool(
     if "CONFIRMED" not in result and "scheduled" not in result.lower():
         return f"Could not schedule the installation: {result}"
 
-    resolve_client_estimate_response(booking_id, "accept", new_date_str, new_time_str, changed_by=client_actor)
+    resolve_client_estimate_response(
+        booking_id, "accept", new_date_str, new_time_str,
+        changed_by=client_actor, client_email=client_email,
+    )
     logger.info(f"ESTIMATE_ACCEPTED_BY_CLIENT: id={booking_id} install={new_date_str} {new_time_str}")
     return (
         f"Estimate for {ticket_code(booking_id)} accepted — installation scheduled for "

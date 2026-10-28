@@ -229,6 +229,7 @@ def test_send_alert_to_manager_tool_sets_ticket_blocked(test_db, monkeypatch):
     monkeypatch.setattr(tools, "get_llm", lambda *a, **k: _FakeInvokeLLM("MESSAGE: broken window\nTO DO: replace glass"))
     monkeypatch.setattr(tools, "send_manager_alert", lambda subject, body: True)
     username_var.set("inst_a")
+    tools.claim_installation_tool.invoke({"booking_id": bid})
     result = tools.send_alert_to_manager_tool.invoke({"message": "window is broken", "booking_id": bid})
     assert "BLOCKED" in result or ticket_code(bid) in result
     conn = get_connection()
