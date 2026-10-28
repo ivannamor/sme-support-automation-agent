@@ -20,6 +20,6 @@ COPY . .
 # on a first run before any volume has been populated.
 RUN mkdir -p db logs secrets data sections app/static/catalogue
 
-EXPOSE 8000 8501
+EXPOSE 8501
 
 CMD ["python", "run.py"]

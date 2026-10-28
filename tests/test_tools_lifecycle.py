@@ -242,8 +242,8 @@ def test_send_alert_to_manager_tool_sets_ticket_blocked(test_db, monkeypatch):
 
 def test_reservation_approve_deducts_stock_via_inventory_api(test_db, monkeypatch):
     monkeypatch.setattr(
-        tools, "inventory_api_tool",
-        type("Fake", (), {"invoke": staticmethod(lambda args: "Successfully reserved 2 unit(s) of IRIS.")})(),
+        tools, "_inventory_request",
+        lambda action, model, quantity=1: (True, "Successfully reserved 2 unit(s) of IRIS."),
     )
     username_var.set("inst_a")
     tools.request_inventory_reservation_tool.invoke({"model": "IRIS", "quantity": 2, "reason": "job"})
@@ -272,6 +272,66 @@ def test_reservation_reject_does_not_touch_inventory(test_db, monkeypatch):
     username_var.set("manager1")
     result = tools.reject_reservation_tool.invoke({"reservation_id": res_id})
     assert "rejected" in result.lower()
+
+
+def _pending_reservation(model: str = "IRIS", quantity: int = 2) -> int:
+    username_var.set("inst_a")
+    tools.request_inventory_reservation_tool.invoke({"model": model, "quantity": quantity})
+    conn = get_connection()
+    res_id = conn.execute("SELECT id FROM pending_reservations WHERE status='pending'").fetchone()["id"]
+    conn.close()
+    username_var.set("manager1")
+    return res_id
+
+
+def _reservation_status(res_id: int) -> str:
+    conn = get_connection()
+    row = conn.execute("SELECT status FROM pending_reservations WHERE id=?", (res_id,)).fetchone()
+    conn.close()
+    return row["status"]
+
+
+def test_reservation_approve_deducts_stock_only_once(test_db, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        tools, "_inventory_request",
+        lambda action, model, quantity=1: calls.append((action, model, quantity)) or (True, "ok"),
+    )
+    res_id = _pending_reservation()
+
+    first = tools.approve_reservation_tool.invoke({"reservation_id": res_id})
+    second = tools.approve_reservation_tool.invoke({"reservation_id": res_id})
+
+    assert "approved" in first.lower()
+    assert "not found" in second
+    assert calls == [("take", "IRIS", 2)]
+
+
+def test_reservation_failed_deduction_puts_request_back_to_pending(test_db, monkeypatch):
+    monkeypatch.setattr(
+        tools, "_inventory_request",
+        lambda action, model, quantity=1: (False, "Inventory Error: Insufficient stock for IRIS. Available: 1"),
+    )
+    res_id = _pending_reservation()
+
+    result = tools.approve_reservation_tool.invoke({"reservation_id": res_id})
+
+    assert "Could not deduct stock" in result
+    assert _reservation_status(res_id) == "pending"
+
+
+def test_reservation_with_error_in_model_name_is_not_mistaken_for_failure(test_db, monkeypatch):
+    # The old check was `"Error" in take_result`; success is now structured.
+    monkeypatch.setattr(
+        tools, "_inventory_request",
+        lambda action, model, quantity=1: (True, "Successfully reserved 2 unit(s) of ERROR-PROOF."),
+    )
+    res_id = _pending_reservation(model="ERROR-PROOF")
+
+    result = tools.approve_reservation_tool.invoke({"reservation_id": res_id})
+
+    assert "approved" in result.lower()
+    assert _reservation_status(res_id) == "approved"
 
 
 # ── helpers ────────────────────────────────────────────────────────────────

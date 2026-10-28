@@ -1618,6 +1618,26 @@ def resolve_reservation(reservation_id: int, status: str, resolved_by: str) -> b
     return updated
 
 
+def reopen_reservation(reservation_id: int) -> bool:
+    """
+    Puts an approved reservation back to 'pending' — used when approval
+    claimed the row but the stock deduction then failed.
+    """
+    conn = get_connection()
+    cursor = conn.execute(
+        """
+        UPDATE pending_reservations
+        SET status = 'pending', resolved_at = NULL, resolved_by = NULL
+        WHERE id = ? AND status = 'approved'
+        """,
+        (reservation_id,),
+    )
+    updated = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return updated
+
+
 # ============================================================
 # Main execution
 # ============================================================
