@@ -25,7 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.assistant import initialize_agent
+from backend.assistant import initialize_agent, TurnResult
 from backend.company_config import COMPANY_CONTEXT
 from backend.llm_provider import OPENROUTER_MODELS, DEFAULT_MODEL, calculate_cost
 from backend.log_context import username_var
@@ -1127,6 +1127,8 @@ def require_auth(allowed_roles: list[str] = None):
 
 # ── agent cache ───────────────────────────────────────────────────────────────
 
+# Shared by every session of a role/model — safe only because the agent keeps
+# no per-request state (each turn's metadata goes into its own TurnResult).
 @st.cache_resource(show_spinner=False)
 def get_agent(model_name: str, role: str):
     return initialize_agent(model_name=model_name, role=role)
@@ -1656,9 +1658,10 @@ def render_client_installation_status() -> None:
 
 def _stream_resume(agent, decision: str, selected_model: str):
     username_var.set(st.session_state.get("username", "unknown"))
+    result = TurnResult()
     with st.chat_message("assistant", avatar=_chat_avatar("assistant")):
-        raw_text = st.write_stream(agent.stream_resume(decision, _get("thread_id")))
-        _save_assistant_turn(agent, raw_text, selected_model)
+        raw_text = st.write_stream(agent.stream_resume(decision, _get("thread_id"), result))
+        _save_assistant_turn(result, raw_text, selected_model)
     st.rerun()
 
 
@@ -1737,9 +1740,10 @@ def handle_user_turn(user_prompt: str, agent, selected_model: str, is_synthetic:
         st.rerun()
         return
 
+    result = TurnResult()
     with st.chat_message("assistant", avatar=_chat_avatar("assistant")):
-        raw_text = st.write_stream(agent.stream_ask(user_prompt, _get("thread_id")))
-        _save_assistant_turn(agent, raw_text, selected_model, user_question=user_prompt)
+        raw_text = st.write_stream(agent.stream_ask(user_prompt, _get("thread_id"), result))
+        _save_assistant_turn(result, raw_text, selected_model, user_question=user_prompt)
 
     st.rerun()
 
@@ -1783,11 +1787,11 @@ def _render_answer_metadata(message: dict):
 
 # ── save assistant turn ───────────────────────────────────────────────────────
 
-def _save_assistant_turn(agent, raw_text: str, selected_model: str, user_question: str = ""):
-    captured_tools = agent._last_tool_calls or []
-    usage          = agent._last_usage or {}
-    run_id         = getattr(agent, "_last_run_id", None)
-    _set("pending_interrupt", getattr(agent, "_last_interrupt", None))
+def _save_assistant_turn(result: TurnResult, raw_text: str, selected_model: str, user_question: str = ""):
+    captured_tools = result.tool_calls
+    usage          = result.usage
+    run_id         = result.run_id
+    _set("pending_interrupt", result.interrupt)
 
     cost = calculate_cost(selected_model, usage.get("input_tokens", 0), usage.get("output_tokens", 0))
     _set("total_cost",      _get("total_cost", 0.0) + cost)
@@ -1825,7 +1829,7 @@ def _save_assistant_turn(agent, raw_text: str, selected_model: str, user_questio
                 break
 
     main_answer = main_answer.strip()
-    pending_interrupt = getattr(agent, "_last_interrupt", None)
+    pending_interrupt = result.interrupt
     if not main_answer and pending_interrupt and pending_interrupt.get("summary"):
         # The graph paused for confirmation without saying anything first — use the
         # interrupt's summary as the bubble content so it's part of the permanent

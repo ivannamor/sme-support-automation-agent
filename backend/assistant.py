@@ -4,6 +4,7 @@ import logging
 import uuid
 import time
 import traceback
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 
@@ -224,11 +225,23 @@ class ToolCallCaptureHandler(BaseCallbackHandler):
             "total_tokens": self.total_input_tokens + self.total_output_tokens,
         }
 
-    def clear(self):
-        self.tool_calls = []
-        self.total_input_tokens = 0
-        self.total_output_tokens = 0
-        self.root_run_id = None
+
+
+def _empty_usage() -> Dict[str, int]:
+    return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+
+@dataclass
+class TurnResult:
+    """
+    Metadata for one conversation turn, filled in by stream_ask()/stream_resume()
+    once the stream is exhausted. The caller owns it — the agent is shared
+    across sessions (st.cache_resource), so per-turn data must never live on it.
+    """
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    usage: Dict[str, int] = field(default_factory=_empty_usage)
+    run_id: Optional[str] = None
+    interrupt: Optional[dict] = None  # non-None when the graph is paused for HITL
 
 
 # ============================================================
@@ -243,6 +256,10 @@ class DoorAssistantAgent:
     - Interpret user requests.
     - Select and call tools.
     - Return final conversational output for the UI/API.
+
+    One instance is shared by every session of a role/model, so it must stay
+    stateless per request: conversation state lives in the checkpointer (keyed
+    by thread_id) and per-turn metadata in the caller's TurnResult.
     """
 
     # ── per-role tool sets ────────────────────────────────────────────────────
@@ -342,13 +359,16 @@ class DoorAssistantAgent:
         tool_factory = self._ROLE_TOOLS.get(role, self._ROLE_TOOLS["manager"])
         self.tools = tool_factory()
 
-        self.callback_handler = ToolCallCaptureHandler()
         self.checkpointer = MemorySaver()
-        self.system_prompt = self._build_system_prompt()
+        role_file = role if role in ("client", "installer") else "manager"
+        self._shared_template = _load_prompt("shared")
+        self._role_template = _load_prompt(role_file)
         self.executor = build_graph(
             llm=self.llm,
             tools=self.tools,
-            system_prompt=self.system_prompt,
+            # A callable, not a string: the agent lives as long as the process,
+            # so today's date must be filled in per call, not at construction.
+            system_prompt=self._build_system_prompt,
             checkpointer=self.checkpointer,
             mutating_tool_names=self._ROLE_MUTATING.get(role, set()),
         )
@@ -360,10 +380,8 @@ class DoorAssistantAgent:
             company_name=COMPANY_CONTEXT["company_name"],
             knowledge_domain=COMPANY_CONTEXT["knowledge_domain"],
         )
-        shared = _load_prompt("shared").format(**format_args)
-
-        role_file = self.role if self.role in ("client", "installer") else "manager"
-        return _load_prompt(role_file).format(shared=shared, **format_args)
+        shared = self._shared_template.format(**format_args)
+        return self._role_template.format(shared=shared, **format_args)
 
     def is_input_safe(self, user_input: str) -> bool:
         """Lightweight input guard. Fails closed on errors."""
@@ -406,145 +424,55 @@ class DoorAssistantAgent:
             logger.error(f"[GUARD_FAILURE] {exc}")
             return False
 
-    def _graph_config(self, thread_id: str) -> dict:
+    def _graph_config(self, thread_id: str, handler: ToolCallCaptureHandler, request_id: str) -> dict:
         return {
             "configurable": {"thread_id": thread_id},
-            "callbacks": [self.callback_handler],
+            "callbacks": [handler],
             "recursion_limit": 12,
             "run_name": "door-assistant",
-            "metadata": {"model": self.model_name},
+            "metadata": {"model": self.model_name, "request_id": request_id},
             "tags": ["production", "door-assistant"],
         }
 
-    def ask(self, query: str, thread_id: str):
-        request_id = str(uuid.uuid4())[:8]
-        request_id_var.set(request_id)
-        start_time = time.time()
-
-        if not self.is_input_safe(query):
-            return {
-                "output": "⚠️ Security Alert: The input was flagged as unsafe.",
-                "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
-                "tool_calls": [],
-                "run_id": None,
-                "interrupt": None,
-            }
-
-        try:
-            self.callback_handler.clear()
-            config = self._graph_config(thread_id)
-            config["metadata"]["request_id"] = request_id
-
-            response = self.executor.invoke(
-                {"messages": [HumanMessage(content=query)]},
-                config=config,
-            )
-
-            interrupt_data = self._get_interrupt(thread_id)
-            captured_tool_calls = self.callback_handler.get_tool_calls()
-            usage = self._extract_usage(response)
-
-            duration = round(time.time() - start_time, 2)
-            logger.info(f"[{request_id}] SUCCESS | Duration: {duration}s")
-
-            return {
-                "output": self._extract_output(response),
-                "usage": usage,
-                "tool_calls": captured_tool_calls,
-                "run_id": self.callback_handler.root_run_id,
-                "interrupt": interrupt_data,
-            }
-
-        except Exception as exc:
-            exc_name = type(exc).__name__
-            # Classify by exception type so ops can tell API errors from bugs.
-            if any(k in exc_name.lower() for k in ("autherror", "authentication", "apiconnection", "ratelimit")):
-                logger.error(f"[{request_id}] LLM_API_ERROR | {exc_name}: {exc}")
-                user_msg = f"❌ LLM provider error (ref: {request_id}). Check your API key or try again later."
-            else:
-                logger.error(
-                    f"[{request_id}] INTERNAL_ERROR | {exc_name}: {exc}\n{traceback.format_exc()}"
-                )
-                user_msg = f"❌ Technical issue encountered (ref: {request_id})."
-            return {
-                "output": user_msg,
-                "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
-                "tool_calls": [],
-                "run_id": None,
-                "interrupt": None,
-            }
-
-    def stream_ask(self, query: str, thread_id: str):
+    def stream_ask(self, query: str, thread_id: str, result: TurnResult):
         """
         Generator that yields text tokens from the LLM as they arrive.
-
-        After exhaustion, metadata is available on:
-          self._last_tool_calls, self._last_usage, self._last_run_id,
-          self._last_interrupt  (non-None when the graph is paused for HITL)
+        Once exhausted, `result` holds the turn's tool calls, usage, run_id and
+        pending HITL interrupt (if any).
         """
-        request_id = str(uuid.uuid4())[:8]
-        request_id_var.set(request_id)
-        start_time = time.time()
-
         if not self.is_input_safe(query):
             yield "⚠️ Security Alert: The input was flagged as unsafe."
-            self._last_tool_calls = []
-            self._last_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-            self._last_run_id = None
-            self._last_interrupt = None
             return
 
-        try:
-            self.callback_handler.clear()
-            config = self._graph_config(thread_id)
-            config["metadata"]["request_id"] = request_id
+        yield from self._stream(
+            {"messages": [HumanMessage(content=query)]}, thread_id, result,
+            label="STREAM",
+            error_text="\n\n❌ Technical issue encountered while generating the response.",
+        )
 
-            for chunk, _ in self.executor.stream(
-                {"messages": [HumanMessage(content=query)]},
-                config=config,
-                stream_mode="messages",
-            ):
-                if (
-                    isinstance(chunk, AIMessageChunk)
-                    and isinstance(chunk.content, str)
-                    and chunk.content
-                    and not chunk.tool_call_chunks
-                ):
-                    yield chunk.content
-
-            duration = round(time.time() - start_time, 2)
-            logger.info(f"[{request_id}] STREAM_SUCCESS | Duration: {duration}s")
-
-        except Exception as exc:
-            logger.error(
-                f"[{request_id}] STREAM_FAILURE | {type(exc).__name__}: {exc}\n{traceback.format_exc()}"
-            )
-            yield "\n\n❌ Technical issue encountered while generating the response."
-
-        finally:
-            self._last_tool_calls = self.callback_handler.get_tool_calls()
-            self._last_usage = self.callback_handler.get_usage()
-            self._last_run_id = self.callback_handler.root_run_id
-            self._last_interrupt = self._get_interrupt(thread_id)
-
-    def stream_resume(self, decision: str, thread_id: str):
+    def stream_resume(self, decision: str, thread_id: str, result: TurnResult):
         """
         Generator that resumes a graph paused by interrupt().
 
         decision: "confirmed" or "rejected"
         """
+        yield from self._stream(
+            Command(resume=decision), thread_id, result,
+            label=f"RESUME_{decision.upper()}",
+            error_text="\n\n❌ Technical issue encountered while resuming.",
+        )
+
+    def _stream(self, graph_input, thread_id: str, result: TurnResult, label: str, error_text: str):
         request_id = str(uuid.uuid4())[:8]
         request_id_var.set(request_id)
         start_time = time.time()
+        # Fresh handler per call — a shared one would mix concurrent sessions' data.
+        handler = ToolCallCaptureHandler()
 
         try:
-            self.callback_handler.clear()
-            config = self._graph_config(thread_id)
-            config["metadata"]["request_id"] = request_id
-
             for chunk, _ in self.executor.stream(
-                Command(resume=decision),
-                config=config,
+                graph_input,
+                config=self._graph_config(thread_id, handler, request_id),
                 stream_mode="messages",
             ):
                 if (
@@ -556,19 +484,19 @@ class DoorAssistantAgent:
                     yield chunk.content
 
             duration = round(time.time() - start_time, 2)
-            logger.info(f"[{request_id}] RESUME_{decision.upper()} | Duration: {duration}s")
+            logger.info(f"[{request_id}] {label}_SUCCESS | Duration: {duration}s")
 
         except Exception as exc:
             logger.error(
-                f"[{request_id}] RESUME_FAILURE | {type(exc).__name__}: {exc}\n{traceback.format_exc()}"
+                f"[{request_id}] {label}_FAILURE | {type(exc).__name__}: {exc}\n{traceback.format_exc()}"
             )
-            yield "\n\n❌ Technical issue encountered while resuming."
+            yield error_text
 
         finally:
-            self._last_tool_calls = self.callback_handler.get_tool_calls()
-            self._last_usage = self.callback_handler.get_usage()
-            self._last_run_id = self.callback_handler.root_run_id
-            self._last_interrupt = self._get_interrupt(thread_id)
+            result.tool_calls = handler.get_tool_calls()
+            result.usage = handler.get_usage()
+            result.run_id = handler.root_run_id
+            result.interrupt = self._get_interrupt(thread_id)
 
     def _get_interrupt(self, thread_id: str) -> Optional[dict]:
         """Returns the first pending interrupt payload, or None."""
@@ -579,39 +507,6 @@ class DoorAssistantAgent:
         except Exception as exc:
             logger.warning(f"GET_INTERRUPT_FAILED: {exc}")
         return None
-
-    def _extract_output(self, response: Dict[str, Any]) -> str:
-        """
-        LangChain's current agent API returns a message state rather than the
-        legacy AgentExecutor {"output": "..."} shape.
-        """
-
-        if isinstance(response, dict):
-            if "output" in response:
-                return str(response.get("output", ""))
-
-            messages = response.get("messages") or []
-            for message in reversed(messages):
-                content = getattr(message, "content", None)
-                if content:
-                    return str(content)
-
-        return str(response)
-
-    def _extract_usage(self, response: Dict[str, Any]) -> Dict[str, int]:
-        """
-        Extract token usage where available; otherwise use callback estimate.
-        """
-
-        usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-
-        if isinstance(response, dict) and "usage_metadata" in response:
-            usage = response["usage_metadata"]
-
-        if usage.get("total_tokens", 0) == 0:
-            usage = self.callback_handler.get_usage()
-
-        return usage
 
 
 # ============================================================
