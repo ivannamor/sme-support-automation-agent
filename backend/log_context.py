@@ -12,3 +12,8 @@ username_var: ContextVar[str] = ContextVar("username", default="unknown")
 # username_var; client tools use it — never an LLM-supplied argument — to
 # decide which tickets the caller may see or act on.
 verified_client_email_var: ContextVar[str] = ContextVar("verified_client_email", default="")
+
+# The session's role, set by the UI alongside username_var. LLM calls made
+# outside a chat turn (dashboard buttons) are logged to usage_log under it;
+# None (offline scripts, tests) means they are not logged.
+role_var: ContextVar[str | None] = ContextVar("role", default=None)

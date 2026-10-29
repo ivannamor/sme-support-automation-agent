@@ -3,6 +3,8 @@ import logging
 import time
 import traceback
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from logging.handlers import RotatingFileHandler as _RotatingFileHandler
 from pathlib import Path
@@ -20,6 +22,7 @@ from backend.graph import build_graph
 from backend.llm_provider import DEFAULT_MODEL, get_llm, get_model_info
 from backend.log_context import request_id_var, username_var, verified_client_email_var
 from backend.secrets_provider import check_required_secrets
+from backend.usage_tracking import track_usage
 
 # ============================================================
 # PROJECT PATHS
@@ -139,12 +142,13 @@ COMPANY_CONTEXT = COMPANY_CONTEXT
 
 
 class ToolCallCaptureHandler(BaseCallbackHandler):
-    """Captures tool calls, rough token usage, and the root LangSmith run_id."""
+    """
+    Captures tool calls and the root LangSmith run_id. Token usage is
+    counted separately, by backend/usage_tracking.py.
+    """
 
     def __init__(self) -> None:
         self.tool_calls: list[dict[str, Any]] = []
-        self.total_input_tokens = 0
-        self.total_output_tokens = 0
         self.root_run_id: str | None = None
 
     def on_chain_start(self, serialized, inputs, *, run_id, parent_run_id=None, **kwargs):
@@ -196,29 +200,8 @@ class ToolCallCaptureHandler(BaseCallbackHandler):
 
         logger.error(f"[TOOL_ERROR] {error}")
 
-    def on_chat_model_start(self, serialization, messages, *, run_id, parent_run_id=None, **kwargs):
-        """Approximate input-token usage for UI display."""
-        try:
-            total_chars = 0
-            for message_batch in messages:
-                for message in message_batch:
-                    total_chars += len(str(getattr(message, "content", "")))
-            self.total_input_tokens += total_chars // 4
-        except Exception:
-            pass
-
-    def on_llm_new_token(self, token, *, run_id, parent_run_id=None, **kwargs):
-        self.total_output_tokens += 1
-
     def get_tool_calls(self) -> list[dict[str, Any]]:
         return self.tool_calls
-
-    def get_usage(self) -> dict[str, int]:
-        return {
-            "input_tokens": self.total_input_tokens,
-            "output_tokens": self.total_output_tokens,
-            "total_tokens": self.total_input_tokens + self.total_output_tokens,
-        }
 
 
 def _empty_usage() -> dict[str, int]:
@@ -235,6 +218,7 @@ class TurnResult:
 
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: dict[str, int] = field(default_factory=_empty_usage)
+    cost_usd: float = 0.0  # every LLM call of the turn, guard and tools included
     run_id: str | None = None
     interrupt: dict | None = None  # non-None when the graph is paused for HITL
 
@@ -447,20 +431,21 @@ class DoorAssistantAgent:
         Once exhausted, `result` holds the turn's tool calls, usage, run_id and
         pending HITL interrupt (if any).
         """
-        if not self.is_input_safe(query):
-            alert = "⚠️ Security Alert: The input was flagged as unsafe."
-            yield alert
-            self._archive_turn(thread_id, query, alert, [], hitl_decision=None)
-            return
+        with self._turn_usage(result):
+            if not self.is_input_safe(query):
+                alert = "⚠️ Security Alert: The input was flagged as unsafe."
+                yield alert
+                self._archive_turn(thread_id, query, alert, [], hitl_decision=None)
+                return
 
-        yield from self._stream(
-            {"messages": [HumanMessage(content=query)]},
-            thread_id,
-            result,
-            label="STREAM",
-            error_text="\n\n❌ Technical issue encountered while generating the response.",
-            user_message=query,
-        )
+            yield from self._stream(
+                {"messages": [HumanMessage(content=query)]},
+                thread_id,
+                result,
+                label="STREAM",
+                error_text="\n\n❌ Technical issue encountered while generating the response.",
+                user_message=query,
+            )
 
     def stream_resume(self, decision: str, thread_id: str, result: TurnResult):
         """
@@ -468,14 +453,28 @@ class DoorAssistantAgent:
 
         decision: "confirmed" or "rejected"
         """
-        yield from self._stream(
-            Command(resume=decision),
-            thread_id,
-            result,
-            label=f"RESUME_{decision.upper()}",
-            error_text="\n\n❌ Technical issue encountered while resuming.",
-            hitl_decision=decision,
-        )
+        with self._turn_usage(result):
+            yield from self._stream(
+                Command(resume=decision),
+                thread_id,
+                result,
+                label=f"RESUME_{decision.upper()}",
+                error_text="\n\n❌ Technical issue encountered while resuming.",
+                hitl_decision=decision,
+            )
+
+    @contextmanager
+    def _turn_usage(self, result: TurnResult) -> Iterator[None]:
+        """
+        Counts every LLM call of the turn (the safety guard and calls made
+        inside tools included) into `result`, and logs it to usage_log.
+        """
+        with track_usage(self.role) as usage:
+            try:
+                yield
+            finally:
+                result.usage = usage.totals()
+                result.cost_usd = usage.cost_usd()
 
     def _stream(
         self,
@@ -526,7 +525,6 @@ class DoorAssistantAgent:
 
         finally:
             result.tool_calls = handler.get_tool_calls()
-            result.usage = handler.get_usage()
             result.run_id = handler.root_run_id
             result.interrupt = self._get_interrupt(thread_id)
             self._archive_turn(
