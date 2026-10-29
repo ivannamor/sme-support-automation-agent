@@ -5,7 +5,6 @@ Clients need no account — they select the Client role directly.
 Installers and managers authenticate with username + bcrypt password.
 """
 
-
 import bcrypt
 
 from backend.database import create_user, get_user

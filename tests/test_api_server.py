@@ -42,6 +42,7 @@ def _stock(model: str) -> int:
 
 # ── auth ──────────────────────────────────────────────────────────────────────
 
+
 def test_missing_key_is_rejected(client):
     assert client.get("/inventory/IRIS").status_code == 403
 
@@ -60,6 +61,7 @@ def test_unconfigured_server_fails_closed(test_db, monkeypatch):
 
 # ── health ────────────────────────────────────────────────────────────────────
 
+
 def test_health_is_public_and_leaks_nothing(client, test_db):
     response = client.get("/health")
     assert response.status_code == 200
@@ -77,6 +79,7 @@ def test_health_reports_unavailable_db(client, test_db):
 
 # ── get ───────────────────────────────────────────────────────────────────────
 
+
 def test_get_item(client):
     _set_stock("IRIS", 7, backorder=2)
     response = client.get("/inventory/iris", headers=AUTH)
@@ -92,6 +95,7 @@ def test_get_unknown_item_is_404(client):
 
 
 # ── take ──────────────────────────────────────────────────────────────────────
+
 
 def test_take_decrements_stock(client):
     _set_stock("IRIS", 5)
@@ -114,14 +118,17 @@ def test_take_unknown_item_is_404(client):
     assert response.status_code == 404
 
 
-@pytest.mark.parametrize("body", [
-    {"model": "IRIS", "quantity": 0},
-    {"model": "IRIS", "quantity": -3},
-    {"model": "IRIS", "quantity": api.MAX_QUANTITY + 1},
-    {"model": "", "quantity": 1},
-    {"model": "IRIS'; DROP TABLE inventory;--", "quantity": 1},
-    {"quantity": 1},
-])
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"model": "IRIS", "quantity": 0},
+        {"model": "IRIS", "quantity": -3},
+        {"model": "IRIS", "quantity": api.MAX_QUANTITY + 1},
+        {"model": "", "quantity": 1},
+        {"model": "IRIS'; DROP TABLE inventory;--", "quantity": 1},
+        {"quantity": 1},
+    ],
+)
 def test_take_rejects_invalid_bodies(client, body):
     _set_stock("IRIS", 5)
     assert client.post("/inventory/take", json=body, headers=AUTH).status_code == 422
@@ -167,13 +174,18 @@ def test_concurrent_takes_never_oversell(client):
 
 # ── backorder ─────────────────────────────────────────────────────────────────
 
+
 def test_backorder_accumulates(client):
     _set_stock("IRIS", 0, backorder=1)
-    response = client.post("/inventory/backorder", json={"model": "IRIS", "quantity": 3}, headers=AUTH)
+    response = client.post(
+        "/inventory/backorder", json={"model": "IRIS", "quantity": 3}, headers=AUTH
+    )
     assert response.status_code == 200
     assert response.json()["backorder_total"] == 4
 
 
 def test_backorder_unknown_item_is_404(client):
-    response = client.post("/inventory/backorder", json={"model": "NOPE", "quantity": 1}, headers=AUTH)
+    response = client.post(
+        "/inventory/backorder", json={"model": "NOPE", "quantity": 1}, headers=AUTH
+    )
     assert response.status_code == 404

@@ -36,10 +36,11 @@ _DEFAULT_MUTATING_TOOL_NAMES = {"book_installation_tool", "request_site_survey_t
 
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
-    pending_tool_call: dict | None   # tool call waiting for HITL confirmation
+    pending_tool_call: dict | None  # tool call waiting for HITL confirmation
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _make_is_mutating(mutating_tool_names: set[str]):
     def _is_mutating(tool_call: Mapping[str, Any]) -> bool:
@@ -47,6 +48,7 @@ def _make_is_mutating(mutating_tool_names: set[str]):
         if name == "inventory_api_tool":
             return tool_call.get("args", {}).get("action") in _MUTATING_INVENTORY_ACTIONS
         return name in mutating_tool_names
+
     return _is_mutating
 
 
@@ -90,7 +92,9 @@ def _confirmation_summary(tc: Mapping[str, Any]) -> str:
         return f"Update cost variable **{args.get('key')}** to **{args.get('value')}**?"
     if name == "complete_job_tool":
         ref = f" (booking #{args.get('booking_id')})" if args.get("booking_id") else ""
-        email_note = f" — client email: {args.get('client_email')}" if args.get("client_email") else ""
+        email_note = (
+            f" — client email: {args.get('client_email')}" if args.get("client_email") else ""
+        )
         return f"Submit job completion report{ref}{email_note}?\n\n> {args.get('notes', '')}"
     if name == "send_estimate_to_client_tool":
         return f"Send price estimate to **{args.get('client_email')}**?"
@@ -100,25 +104,27 @@ def _confirmation_summary(tc: Mapping[str, Any]) -> str:
     if name == "claim_installation_tool":
         return f"Start working on installation **{ticket_code(args.get('booking_id'))}** and mark it as in progress?"
     if name == "approve_booking_tool":
-        return f"Approve booking **{ticket_code(args.get('booking_id'))}** and add it to the calendar?"
+        return (
+            f"Approve booking **{ticket_code(args.get('booking_id'))}** and add it to the calendar?"
+        )
     if name == "reject_booking_tool":
         return f"Reject booking **{ticket_code(args.get('booking_id'))}**? This cannot be undone."
     if name == "approve_job_tool":
-        email_note = f" — thank-you email to **{args['client_email']}**" if args.get("client_email") else ""
+        email_note = (
+            f" — thank-you email to **{args['client_email']}**" if args.get("client_email") else ""
+        )
         return f"Approve job completion report **#{args.get('job_id')}**{email_note}?"
     if name == "reject_job_tool":
         return f"Reject job completion report **#{args.get('job_id')}**? This cannot be undone."
     if name == "edit_ticket_tool":
-        changed = {
-            k: v for k, v in args.items()
-            if k != "ticket_reference" and v is not None
-        }
+        changed = {k: v for k, v in args.items() if k != "ticket_reference" and v is not None}
         field_list = ", ".join(f"**{k}** → {v}" for k, v in changed.items())
         return f"Update {args.get('ticket_reference')}: {field_list}?"
     return f"Execute **{name}** with args `{args}`?"
 
 
 # ── graph factory ─────────────────────────────────────────────────────────────
+
 
 def build_graph(
     llm,
@@ -187,12 +193,14 @@ def build_graph(
             raise TypeError(f"confirm_node expects an AIMessage, got {type(last).__name__}")
         mutating_tc = next(tc for tc in last.tool_calls if _is_mutating(tc))
 
-        decision = interrupt({
-            "tool": mutating_tc["name"],
-            "args": mutating_tc["args"],
-            "summary": _confirmation_summary(mutating_tc),
-            "tool_call_id": mutating_tc["id"],
-        })
+        decision = interrupt(
+            {
+                "tool": mutating_tc["name"],
+                "args": mutating_tc["args"],
+                "summary": _confirmation_summary(mutating_tc),
+                "tool_call_id": mutating_tc["id"],
+            }
+        )
 
         if decision == "confirmed":
             return Command(

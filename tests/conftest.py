@@ -72,6 +72,7 @@ class ScriptedFakeChatModel(BaseChatModel):
     without calling a real LLM API. bind_tools() is a no-op returning self,
     matching how build_graph() calls llm.bind_tools(tools, parallel_tool_calls=False).
     """
+
     responses: list[AIMessage] = []
 
     def bind_tools(self, tools, **kwargs):
@@ -90,6 +91,7 @@ class ScriptedFakeChatModel(BaseChatModel):
 def scripted_llm():
     def _make(responses: list[AIMessage]) -> ScriptedFakeChatModel:
         return ScriptedFakeChatModel(responses=list(responses))
+
     return _make
 
 
@@ -105,6 +107,7 @@ class FakeEmbeddings(Embeddings):
     testing actual semantic quality (that's what evaluation/evaluate_rag.py
     with the real embeddings model is for).
     """
+
     DIMENSIONS = 32
 
     def _vector(self, text: str) -> list[float]:

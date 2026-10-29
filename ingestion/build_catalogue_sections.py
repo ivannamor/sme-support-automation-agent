@@ -39,7 +39,9 @@ def main() -> None:
         json.dump(sections, file, ensure_ascii=False, indent=2)
 
     product_count = sum(1 for section in sections if section["doc_type"] == "product")
-    print(f"Wrote {len(sections)} sections ({product_count} products) to: {CATALOGUE_SECTIONS_PATH}")
+    print(
+        f"Wrote {len(sections)} sections ({product_count} products) to: {CATALOGUE_SECTIONS_PATH}"
+    )
 
 
 if __name__ == "__main__":

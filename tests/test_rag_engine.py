@@ -12,8 +12,14 @@ from rag.rag_engine import deduplicate, detect_product
 
 
 def test_deduplicate_removes_exact_duplicates():
-    doc1 = Document(page_content="Same content here" * 20, metadata={"source": "a.pdf", "collection": "catalogue_specs"})
-    doc2 = Document(page_content="Same content here" * 20, metadata={"source": "a.pdf", "collection": "catalogue_specs"})
+    doc1 = Document(
+        page_content="Same content here" * 20,
+        metadata={"source": "a.pdf", "collection": "catalogue_specs"},
+    )
+    doc2 = Document(
+        page_content="Same content here" * 20,
+        metadata={"source": "a.pdf", "collection": "catalogue_specs"},
+    )
     result = deduplicate([doc1, doc2])
     assert len(result) == 1
 

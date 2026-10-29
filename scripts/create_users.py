@@ -12,7 +12,7 @@ init_db()
 
 USERS = [
     ("installer", "change-me", "installer"),
-    ("manager",   "change-me",   "manager"),
+    ("manager", "change-me", "manager"),
 ]
 
 for username, password, role in USERS:

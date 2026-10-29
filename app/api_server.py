@@ -117,6 +117,7 @@ class BackorderResult(BaseModel):
 # Database helpers
 # ============================================================
 
+
 def normalize_model(model: str) -> str:
     return model.strip().upper()
 
@@ -156,6 +157,7 @@ def _require_item(model_code: str) -> sqlite3.Row:
 # Endpoints
 # ============================================================
 
+
 @app.get("/health")
 def health_check():
     """
@@ -168,7 +170,9 @@ def health_check():
     return {"status": "ok"}
 
 
-@app.get("/inventory/{model}", response_model=InventoryItem, dependencies=[Depends(require_api_key)])
+@app.get(
+    "/inventory/{model}", response_model=InventoryItem, dependencies=[Depends(require_api_key)]
+)
 def get_item(model: str = PathParam(pattern=MODEL_PATTERN)):
     """
     Returns stock, price, and backorder count for a model.
@@ -208,7 +212,9 @@ def take_item(body: StockChange):
         item = _require_item(model_code)  # 404 if the model doesn't exist
         logger.warning(
             "FAILED TAKE: %sx %s requested. Available stock: %s.",
-            body.quantity, model_code, item["stock"],
+            body.quantity,
+            model_code,
+            item["stock"],
         )
         raise HTTPException(
             status_code=409,
@@ -216,7 +222,12 @@ def take_item(body: StockChange):
         )
 
     new_stock = rows[0]["stock"]
-    logger.info("ORDER CONFIRMED: %sx %s removed from stock. New stock: %s.", body.quantity, model_code, new_stock)
+    logger.info(
+        "ORDER CONFIRMED: %sx %s removed from stock. New stock: %s.",
+        body.quantity,
+        model_code,
+        new_stock,
+    )
 
     return TakeResult(
         message=f"Successfully reserved {body.quantity} unit(s) of {model_code}.",
@@ -226,7 +237,9 @@ def take_item(body: StockChange):
     )
 
 
-@app.post("/inventory/backorder", response_model=BackorderResult, dependencies=[Depends(require_api_key)])
+@app.post(
+    "/inventory/backorder", response_model=BackorderResult, dependencies=[Depends(require_api_key)]
+)
 def backorder_item(body: StockChange):
     """
     Adds requested units to backorder count.

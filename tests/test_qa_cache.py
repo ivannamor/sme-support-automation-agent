@@ -20,7 +20,9 @@ def isolated_qa_cache(test_db, tmp_path, monkeypatch):
 
 
 def test_submit_for_review_adds_to_pending_queue(isolated_qa_cache):
-    added = qa_cache.submit_for_review("What is IRIS?", "IRIS is a window model.", source_role="client")
+    added = qa_cache.submit_for_review(
+        "What is IRIS?", "IRIS is a window model.", source_role="client"
+    )
     assert added is True
     pending = qa_cache.get_pending()
     assert len(pending) == 1
@@ -72,6 +74,8 @@ def test_submit_for_review_skips_when_already_cached(isolated_qa_cache):
 
     # Submitting the same question again should be skipped — an approved
     # cache entry already covers it (checked via _approved_cache_hit).
-    added = qa_cache.submit_for_review("What is IRIS?", "A slightly different phrasing of the answer.", source_role="client")
+    added = qa_cache.submit_for_review(
+        "What is IRIS?", "A slightly different phrasing of the answer.", source_role="client"
+    )
     assert added is False
     assert qa_cache.get_pending() == []

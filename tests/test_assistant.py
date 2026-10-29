@@ -21,9 +21,14 @@ _SURVEY_CALL = {
     "name": "request_site_survey_tool",
     "id": "call_survey",
     "args": {
-        "model": "IRIS", "quantity": 1, "date_str": "2030-01-01", "time_str": "10:00",
-        "client_name": "Alice", "client_email": "alice@example.com",
-        "client_phone": "1", "client_address": "Via A 1",
+        "model": "IRIS",
+        "quantity": 1,
+        "date_str": "2030-01-01",
+        "time_str": "10:00",
+        "client_name": "Alice",
+        "client_email": "alice@example.com",
+        "client_phone": "1",
+        "client_address": "Via A 1",
     },
 }
 
@@ -36,6 +41,7 @@ class RoutingFakeChatModel(BaseChatModel):
     waits on a barrier so concurrent turns are guaranteed to overlap, and
     records every system prompt it receives.
     """
+
     barrier: threading.Barrier | None = None
     system_prompts: list[str] = []
 
@@ -45,7 +51,9 @@ class RoutingFakeChatModel(BaseChatModel):
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
-        self.system_prompts.append(next(m.content for m in messages if isinstance(m, SystemMessage)))
+        self.system_prompts.append(
+            next(m.content for m in messages if isinstance(m, SystemMessage))
+        )
         if self.barrier:
             self.barrier.wait()
         last = messages[-1]
@@ -66,6 +74,7 @@ def make_agent(monkeypatch):
         monkeypatch.setattr(assistant, "get_llm", lambda **kwargs: llm)
         monkeypatch.setattr(DoorAssistantAgent, "is_input_safe", lambda self, q: True)
         return DoorAssistantAgent(role="client")
+
     return _make
 
 

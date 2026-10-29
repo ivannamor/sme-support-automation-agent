@@ -17,6 +17,7 @@ OPENROUTER_API_KEY = require_secret("OPENROUTER_API_KEY")
 # MODEL CONFIGURATION
 # ============================================================
 
+
 class ModelInfo(TypedDict):
     name: str
     provider: str
@@ -66,40 +67,40 @@ DEFAULT_MODEL = get_secret("OPENROUTER_MODEL", "openai/gpt-4o-mini")
 # LLM FACTORY
 # ============================================================
 
+
 def get_llm(
     model_name: str | None = None,
     temperature: float = 0,
     max_tokens: int = 700,
     streaming: bool = False,
-    **kwargs
+    **kwargs,
 ) -> Any:
     """
     Get a LangChain LLM instance configured for OpenRouter.
-    
+
     Args:
         model_name: The model identifier (e.g., 'anthropic/claude-3.5-sonnet')
                    If None, uses the default model.
         temperature: Sampling temperature (0-2)
         max_tokens: Maximum tokens to generate
         **kwargs: Additional parameters to pass to the ChatOpenAI constructor
-    
+
     Returns:
         A LangChain ChatOpenAI instance configured for OpenRouter
     """
     from langchain_openai import ChatOpenAI
     from pydantic import SecretStr
-    
+
     # Use default if not specified
     if model_name is None:
         model_name = DEFAULT_MODEL
-    
+
     # Validate model
     if model_name not in OPENROUTER_MODELS:
         raise ValueError(
-            f"Unknown model: {model_name}. "
-            f"Available models: {list(OPENROUTER_MODELS.keys())}"
+            f"Unknown model: {model_name}. Available models: {list(OPENROUTER_MODELS.keys())}"
         )
-    
+
     # Create the LLM with OpenRouter configuration
     # Note: OpenRouter is compatible with OpenAI API, so we use ChatOpenAI
     # with the base_url pointing to OpenRouter
@@ -111,55 +112,51 @@ def get_llm(
         api_key=SecretStr(OPENROUTER_API_KEY),
         base_url="https://openrouter.ai/api/v1",
         streaming=streaming,
-        **kwargs
+        **kwargs,
     )
-    
+
     return llm
 
 
 def get_model_info(model_name: str | None = None) -> ModelInfo:
     """
     Get information about a specific model or the default model.
-    
+
     Args:
         model_name: The model identifier. If None, returns info for default model.
-    
+
     Returns:
         Dictionary containing model information
     """
     if model_name is None:
         model_name = DEFAULT_MODEL
-    
+
     if model_name not in OPENROUTER_MODELS:
         raise ValueError(f"Unknown model: {model_name}")
-    
+
     return OPENROUTER_MODELS[model_name]
 
 
-def calculate_cost(
-    model_name: str,
-    input_tokens: int,
-    output_tokens: int
-) -> float:
+def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> float:
     """
     Calculate the cost for a given number of tokens.
-    
+
     Args:
         model_name: The model identifier
         input_tokens: Number of input tokens
         output_tokens: Number of output tokens
-    
+
     Returns:
         Cost in USD
     """
     if model_name not in OPENROUTER_MODELS:
         raise ValueError(f"Unknown model: {model_name}")
-    
+
     model_info = OPENROUTER_MODELS[model_name]
-    
+
     input_cost = (input_tokens / 1000) * model_info["input_price"]
     output_cost = (output_tokens / 1000) * model_info["output_price"]
-    
+
     return input_cost + output_cost
 
 
@@ -167,14 +164,15 @@ def calculate_cost(
 # EMBEDDINGS (still using OpenAI for embeddings)
 # ============================================================
 
+
 def get_embeddings() -> Any:
     """
     Get an embeddings instance. Still uses OpenAI as OpenRouter
     doesn't provide free embeddings.
-    
+
     Returns:
         OpenAIEmbeddings instance
     """
     from langchain_openai import OpenAIEmbeddings
-    
+
     return OpenAIEmbeddings(model="text-embedding-3-small")

@@ -17,15 +17,16 @@ from backend.llm_provider import get_embeddings
 
 logger = logging.getLogger("QACache")
 
-PROJECT_ROOT   = Path(__file__).resolve().parents[1]
-DB_DIRECTORY   = str(PROJECT_ROOT / "db" / "company_rag_db")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DB_DIRECTORY = str(PROJECT_ROOT / "db" / "company_rag_db")
 COLLECTION_NAME = "qa_cache"
-SIMILARITY_THRESHOLD = 0.88   # cosine similarity; 1.0 = identical
+SIMILARITY_THRESHOLD = 0.88  # cosine similarity; 1.0 = identical
 # 0.88 catches clear rephrasing of the same question (e.g. "What is X?" / "Tell me about X?")
 # while keeping "What is X?" and "How do I install X?" apart (~0.78-0.83).
 
 
 # ── internal helpers ──────────────────────────────────────────────────────────
+
 
 def _store() -> Chroma:
     return Chroma(
@@ -48,6 +49,7 @@ def _approved_cache_hit(question: str) -> bool:
 
 
 # ── public API ────────────────────────────────────────────────────────────────
+
 
 def lookup(query: str) -> str | None:
     """
@@ -120,9 +122,7 @@ def approve(pending_id: int, approved_by: str = "manager") -> bool:
 
     # Final guard: may have been cached by a parallel approval
     if _approved_cache_hit(question):
-        conn.execute(
-            "UPDATE qa_pending SET status = 'rejected' WHERE id = ?", (pending_id,)
-        )
+        conn.execute("UPDATE qa_pending SET status = 'rejected' WHERE id = ?", (pending_id,))
         conn.commit()
         conn.close()
         logger.info(f"QA_CACHE_APPROVE_SKIPPED_DUP: id={pending_id}")
@@ -132,20 +132,20 @@ def approve(pending_id: int, approved_by: str = "manager") -> bool:
         # Embed the QUESTION; store the ANSWER in metadata.
         _store().add_texts(
             texts=[question],
-            metadatas=[{
-                "answer":      answer,
-                "approved_by": approved_by,
-                "approved_at": datetime.now(UTC).isoformat(),
-            }],
+            metadatas=[
+                {
+                    "answer": answer,
+                    "approved_by": approved_by,
+                    "approved_at": datetime.now(UTC).isoformat(),
+                }
+            ],
         )
     except Exception as exc:
         conn.close()
         logger.error(f"QA_CACHE_CHROMA_WRITE_FAILED: {exc}", exc_info=True)
         return False
 
-    conn.execute(
-        "UPDATE qa_pending SET status = 'approved' WHERE id = ?", (pending_id,)
-    )
+    conn.execute("UPDATE qa_pending SET status = 'approved' WHERE id = ?", (pending_id,))
     conn.commit()
     conn.close()
     logger.info(f"QA_CACHE_APPROVED: id={pending_id} by={approved_by}")

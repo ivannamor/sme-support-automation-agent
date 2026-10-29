@@ -64,21 +64,27 @@ def build_dataset() -> EvaluationDataset:
     for question in GOLDEN_QUESTIONS:
         answer, docs = get_assistant_response(question)
         contexts = [d.page_content for d in docs] or ["(no context retrieved)"]
-        samples.append(SingleTurnSample(
-            user_input=question,
-            response=answer,
-            retrieved_contexts=contexts,
-            reference=answer,
-        ))
+        samples.append(
+            SingleTurnSample(
+                user_input=question,
+                response=answer,
+                retrieved_contexts=contexts,
+                reference=answer,
+            )
+        )
         print(f"  answered: {question[:60]}...")
     return EvaluationDataset.from_list([s.model_dump() for s in samples])
 
 
 def main():
-    print(f"Building golden dataset ({len(GOLDEN_QUESTIONS)} questions) — this runs the real RAG pipeline for each one:")
+    print(
+        f"Building golden dataset ({len(GOLDEN_QUESTIONS)} questions) — this runs the real RAG pipeline for each one:"
+    )
     dataset = build_dataset()
 
-    print("\nRunning RAGAS evaluation (faithfulness, answer relevancy, context precision/recall)...")
+    print(
+        "\nRunning RAGAS evaluation (faithfulness, answer relevancy, context precision/recall)..."
+    )
     # RAGAS' own judge prompts (claim decomposition, multi-step scoring) need
     # more headroom than get_llm's default max_tokens=700 — a truncated judge
     # response raises LLMDidNotFinishException and that sub-score silently
@@ -94,7 +100,11 @@ def main():
     )
 
     df = result.to_pandas()
-    metric_cols = [c for c in ("faithfulness", "answer_relevancy", "context_precision", "context_recall") if c in df.columns]
+    metric_cols = [
+        c
+        for c in ("faithfulness", "answer_relevancy", "context_precision", "context_recall")
+        if c in df.columns
+    ]
 
     print("\n" + "=" * 60)
     print(f"RAGAS Evaluation Report — {len(GOLDEN_QUESTIONS)} questions")

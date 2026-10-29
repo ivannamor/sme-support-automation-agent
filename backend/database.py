@@ -15,14 +15,13 @@ DB_DIR = PROJECT_ROOT / "db"
 DB_PATH = DB_DIR / "company.db"
 
 # This is the reviewed section map used by the catalogue RAG ingestion.
-CATALOGUE_SECTIONS_PATH = (
-    PROJECT_ROOT / "sections" / "catalogue" / "catalogue_sections.json"
-)
+CATALOGUE_SECTIONS_PATH = PROJECT_ROOT / "sections" / "catalogue" / "catalogue_sections.json"
 
 
 # ============================================================
 # Product loading
 # ============================================================
+
 
 def load_catalogue_products(
     sections_path: Path = CATALOGUE_SECTIONS_PATH,
@@ -145,6 +144,7 @@ def build_inventory_seed_items() -> list[tuple]:
 # ============================================================
 # Database initialization
 # ============================================================
+
 
 def get_connection() -> sqlite3.Connection:
     """
@@ -290,13 +290,13 @@ def init_db(reset: bool = False) -> None:
     cursor.executemany(
         "INSERT OR IGNORE INTO installation_costs (key, value, description) VALUES (?, ?, ?)",
         [
-            ("hourly_rate",          45.00, "Installer hourly labour rate (€/hr)"),
-            ("travel_cost_per_km",    0.30, "Vehicle travel cost (€/km)"),
+            ("hourly_rate", 45.00, "Installer hourly labour rate (€/hr)"),
+            ("travel_cost_per_km", 0.30, "Vehicle travel cost (€/km)"),
             ("generic_install_cost", 50.00, "Fixed overhead per installation job (€)"),
-            ("vat_rate",              0.22, "VAT rate applied to the subtotal (e.g. 0.22 = 22%)"),
+            ("vat_rate", 0.22, "VAT rate applied to the subtotal (e.g. 0.22 = 22%)"),
             ("glass_price_standard", 90.00, "Standard low-E double glazing (€/m²)"),
-            ("glass_price_triple",  140.00, "Triple glazing (€/m²)"),
-            ("glass_price_security",220.00, "Security/anti-break-in laminated glazing (€/m²)"),
+            ("glass_price_triple", 140.00, "Triple glazing (€/m²)"),
+            ("glass_price_security", 220.00, "Security/anti-break-in laminated glazing (€/m²)"),
             ("survey_hours_per_unit", 0.5, "Site survey time per window/door unit (hours)"),
         ],
     )
@@ -440,13 +440,21 @@ def init_db(reset: bool = False) -> None:
         )
 
     # Add columns to pending_bookings if they don't exist yet.
-    booking_cols = [row[1] for row in cursor.execute("PRAGMA table_info(pending_bookings)").fetchall()]
+    booking_cols = [
+        row[1] for row in cursor.execute("PRAGMA table_info(pending_bookings)").fetchall()
+    ]
     if "client_email" not in booking_cols:
-        cursor.execute("ALTER TABLE pending_bookings ADD COLUMN client_email TEXT NOT NULL DEFAULT ''")
+        cursor.execute(
+            "ALTER TABLE pending_bookings ADD COLUMN client_email TEXT NOT NULL DEFAULT ''"
+        )
     if "client_phone" not in booking_cols:
-        cursor.execute("ALTER TABLE pending_bookings ADD COLUMN client_phone TEXT NOT NULL DEFAULT ''")
+        cursor.execute(
+            "ALTER TABLE pending_bookings ADD COLUMN client_phone TEXT NOT NULL DEFAULT ''"
+        )
     if "quantity" not in booking_cols:
-        cursor.execute("ALTER TABLE pending_bookings ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1")
+        cursor.execute(
+            "ALTER TABLE pending_bookings ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1"
+        )
     if "assigned_to" not in booking_cols:
         cursor.execute("ALTER TABLE pending_bookings ADD COLUMN assigned_to TEXT")
     if "started_at" not in booking_cols:
@@ -465,7 +473,9 @@ def init_db(reset: bool = False) -> None:
     # created before this migration — which all went straight to installation
     # under the old flow — keeps its correct historical phase.
     if "ticket_phase" not in booking_cols:
-        cursor.execute("ALTER TABLE pending_bookings ADD COLUMN ticket_phase TEXT NOT NULL DEFAULT 'installation'")
+        cursor.execute(
+            "ALTER TABLE pending_bookings ADD COLUMN ticket_phase TEXT NOT NULL DEFAULT 'installation'"
+        )
     if "client_id" not in booking_cols:
         cursor.execute("ALTER TABLE pending_bookings ADD COLUMN client_id INTEGER")
     if "height_cm" not in booking_cols:
@@ -534,7 +544,9 @@ def init_db(reset: bool = False) -> None:
     )
 
     # Add booking_id to installer_alerts so alerts can be linked to a ticket.
-    alert_cols = [row[1] for row in cursor.execute("PRAGMA table_info(installer_alerts)").fetchall()]
+    alert_cols = [
+        row[1] for row in cursor.execute("PRAGMA table_info(installer_alerts)").fetchall()
+    ]
     if "booking_id" not in alert_cols:
         cursor.execute("ALTER TABLE installer_alerts ADD COLUMN booking_id INTEGER")
 
@@ -560,6 +572,7 @@ def init_db(reset: bool = False) -> None:
 # ============================================================
 # Inventory helpers for tools.py / assistant.py
 # ============================================================
+
 
 def get_inventory() -> list[dict[str, Any]]:
     """
@@ -608,6 +621,7 @@ def get_product(model: str) -> dict[str, Any] | None:
 # App config helpers (shared settings across roles/sessions)
 # ============================================================
 
+
 def get_config(key: str, default: str = "") -> str:
     conn = get_connection()
     row = conn.execute("SELECT value FROM app_config WHERE key = ?", (key,)).fetchone()
@@ -629,6 +643,7 @@ def set_config(key: str, value: str) -> None:
 # ============================================================
 # Usage log helpers
 # ============================================================
+
 
 def log_usage(
     role: str,
@@ -677,10 +692,10 @@ def get_usage_stats(period: str = "day") -> dict:
 
     by_role = {r["role"]: dict(r) for r in rows}
     totals = {
-        "input_tokens":  sum(r["input_tokens"]  for r in by_role.values()),
+        "input_tokens": sum(r["input_tokens"] for r in by_role.values()),
         "output_tokens": sum(r["output_tokens"] for r in by_role.values()),
-        "cost_usd":      sum(r["cost_usd"]      for r in by_role.values()),
-        "requests":      sum(r["requests"]       for r in by_role.values()),
+        "cost_usd": sum(r["cost_usd"] for r in by_role.values()),
+        "requests": sum(r["requests"] for r in by_role.values()),
     }
     return {"totals": totals, "by_role": by_role}
 
@@ -722,9 +737,9 @@ def get_business_analytics(period: str = "month") -> dict:
     ).fetchall()
     conn.close()
 
-    closed_count   = len(rows)
-    total_revenue  = sum(r["estimated_price"] or 0 for r in rows)
-    total_hours    = sum((r["quantity"] or 1) * (r["installation_hours"] or 0) for r in rows)
+    closed_count = len(rows)
+    total_revenue = sum(r["estimated_price"] or 0 for r in rows)
+    total_hours = sum((r["quantity"] or 1) * (r["installation_hours"] or 0) for r in rows)
 
     by_day: dict[str, dict[str, float]] = {}
     for r in rows:
@@ -768,6 +783,7 @@ def reset_operational_data() -> None:
 # ============================================================
 # Job completion helpers
 # ============================================================
+
 
 def create_job_completion(
     sent_by: str,
@@ -858,6 +874,7 @@ def get_booking_client_email(booking_id: int) -> str:
 # User helpers
 # ============================================================
 
+
 def create_user(username: str, password_hash: str, role: str) -> bool:
     """Inserts a new user. Returns False if username already exists."""
     conn = get_connection()
@@ -888,6 +905,7 @@ def get_user(username: str) -> dict[str, Any] | None:
 # ============================================================
 # Client directory helpers
 # ============================================================
+
 
 def upsert_client(full_name: str, email: str, phone: str = "", address: str = "") -> int:
     """
@@ -933,6 +951,7 @@ def get_clients() -> list[dict[str, Any]]:
 # Pending booking helpers
 # ============================================================
 
+
 def create_pending_booking(
     model: str,
     date_str: str,
@@ -961,12 +980,25 @@ def create_pending_booking(
              client_lat, client_lon, ticket_type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (requested_by, model, date_str, time_str, notes,
-         client_email, client_phone, client_name, client_address, quantity,
-         ticket_phase, client_id,
-         date_str if ticket_phase == "survey" else None,
-         time_str if ticket_phase == "survey" else None,
-         client_lat, client_lon, ticket_type),
+        (
+            requested_by,
+            model,
+            date_str,
+            time_str,
+            notes,
+            client_email,
+            client_phone,
+            client_name,
+            client_address,
+            quantity,
+            ticket_phase,
+            client_id,
+            date_str if ticket_phase == "survey" else None,
+            time_str if ticket_phase == "survey" else None,
+            client_lat,
+            client_lon,
+            ticket_type,
+        ),
     )
     booking_id = _inserted_id(cursor)
     _log_ticket_status(conn, booking_id, "new", requested_by)
@@ -1017,17 +1049,17 @@ def get_approved_bookings(assigned_to: str | None = None) -> list[dict[str, Any]
     if assigned_to is None:
         rows = conn.execute(
             _COLS + " WHERE status = 'approved' AND ticket_status NOT IN ('closed', 'cancelled') "
-                    "ORDER BY date_str, time_str"
+            "ORDER BY date_str, time_str"
         ).fetchall()
     elif assigned_to == "":
         rows = conn.execute(
             _COLS + " WHERE status = 'approved' AND ticket_status NOT IN ('closed', 'cancelled') "
-                    "AND assigned_to IS NULL ORDER BY date_str, time_str"
+            "AND assigned_to IS NULL ORDER BY date_str, time_str"
         ).fetchall()
     else:
         rows = conn.execute(
             _COLS + " WHERE status = 'approved' AND ticket_status NOT IN ('closed', 'cancelled') "
-                    "AND assigned_to = ? ORDER BY date_str, time_str",
+            "AND assigned_to = ? ORDER BY date_str, time_str",
             (assigned_to,),
         ).fetchall()
     conn.close()
@@ -1077,7 +1109,9 @@ def release_booking(booking_id: int, installer_username: str) -> bool:
     )
     updated = cursor.rowcount > 0
     if updated:
-        _log_ticket_status(conn, booking_id, "open", installer_username, note="released by installer")
+        _log_ticket_status(
+            conn, booking_id, "open", installer_username, note="released by installer"
+        )
     conn.commit()
     conn.close()
     return updated
@@ -1121,8 +1155,7 @@ def decline_booking(booking_id: int, installer_username: str, reason: str) -> in
     detail = f" ({row['model']} on {row['date_str']} at {row['time_str']})" if row else ""
     code = ticket_code(booking_id)
     structured = (
-        f"Installer {installer_username} declined installation {code}{detail}.\n\n"
-        f"Reason: {reason}"
+        f"Installer {installer_username} declined installation {code}{detail}.\n\nReason: {reason}"
     )
     cursor = conn.execute(
         """
@@ -1156,6 +1189,7 @@ def get_installer_active_booking(installer_username: str) -> dict[str, Any] | No
 # ============================================================
 # Site-survey → priced-estimate → installation lifecycle helpers
 # ============================================================
+
 
 def save_survey_measurements(
     booking_id: int,
@@ -1231,7 +1265,9 @@ def reject_survey_report(booking_id: int, resolved_by: str) -> bool:
     )
     updated = cursor.rowcount > 0
     if updated:
-        _log_ticket_status(conn, booking_id, "in_progress", resolved_by, note="survey report rejected")
+        _log_ticket_status(
+            conn, booking_id, "in_progress", resolved_by, note="survey report rejected"
+        )
     conn.commit()
     conn.close()
     return updated
@@ -1294,7 +1330,9 @@ def resolve_client_estimate_response(
     return updated
 
 
-def find_tickets_by_email(client_email: str, ticket_status: str | None = None) -> list[dict[str, Any]]:
+def find_tickets_by_email(
+    client_email: str, ticket_status: str | None = None
+) -> list[dict[str, Any]]:
     """
     Finds tickets by client email (case-insensitive), optionally filtered by
     ticket_status. Callers must pass a *verified* email — this does no
@@ -1361,7 +1399,9 @@ def get_all_tickets() -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def _log_ticket_status(conn, booking_id: int, ticket_status: str, changed_by: str, note: str = "") -> None:
+def _log_ticket_status(
+    conn, booking_id: int, ticket_status: str, changed_by: str, note: str = ""
+) -> None:
     """
     Appends one row to the ticket audit trail. Takes an existing connection so
     the log write commits atomically with whatever status change triggered it
@@ -1401,8 +1441,15 @@ def update_ticket_coordinates(booking_id: int, client_lat: float, client_lon: fl
 
 
 _EDITABLE_TICKET_FIELDS = {
-    "client_name", "client_email", "client_phone", "client_address",
-    "date_str", "time_str", "quantity", "notes", "ticket_type",
+    "client_name",
+    "client_email",
+    "client_phone",
+    "client_address",
+    "date_str",
+    "time_str",
+    "quantity",
+    "notes",
+    "ticket_type",
 }
 
 
@@ -1446,8 +1493,13 @@ def update_ticket_details(booking_id: int, changed_by: str, **fields) -> bool:
 # ============================================================
 
 VALID_COST_KEYS = {
-    "hourly_rate", "travel_cost_per_km", "generic_install_cost", "vat_rate",
-    "glass_price_standard", "glass_price_triple", "glass_price_security",
+    "hourly_rate",
+    "travel_cost_per_km",
+    "generic_install_cost",
+    "vat_rate",
+    "glass_price_standard",
+    "glass_price_triple",
+    "glass_price_security",
     "survey_hours_per_unit",
 }
 
@@ -1485,6 +1537,7 @@ def update_cost(key: str, value: float) -> bool:
 # ============================================================
 # Installer alert helpers
 # ============================================================
+
 
 def create_alert(
     sent_by: str,
@@ -1556,6 +1609,7 @@ def mark_alerts_read(alert_ids: list[int]) -> None:
 # ============================================================
 # Pending reservation helpers
 # ============================================================
+
 
 def create_pending_reservation(
     model: str,

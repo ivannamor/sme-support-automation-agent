@@ -21,9 +21,11 @@ def product_name_from_url(url: str) -> str | None:
     match = PRODUCT_PATH_RE.match(urlparse(url).path)
     return slug_to_product_name(match.group(1)) if match else None
 
+
 try:
     import requests  # type: ignore
 except ImportError:  # pragma: no cover - exercised in minimal environments
+
     class _RequestsCompat:
         @staticmethod
         def get(url: str, **kwargs):

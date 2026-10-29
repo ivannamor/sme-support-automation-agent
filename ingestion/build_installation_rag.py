@@ -21,14 +21,17 @@ DB_DIRECTORY = PROJECT_ROOT / "db" / "company_rag_db"
 # 1. Data model
 # ============================================================
 
+
 class ParsedPage(BaseModel):
     page: int
     text: str
     source: str
 
+
 # ============================================================
 # 2. Parse PDF page by page
 # ============================================================
+
 
 def parse_pdf_pages(
     pdf_path: str,
@@ -67,9 +70,11 @@ def parse_pdf_pages(
 
     return pages
 
+
 # ============================================================
 # 3. Chunking: group consecutive pages up to a target size
 # ============================================================
+
 
 def split_installation_manual_into_chunks(
     pages: list[ParsedPage],
@@ -103,10 +108,7 @@ def split_installation_manual_into_chunks(
         if not current_pages:
             return
 
-        text = "\n\n".join(
-            f"--- PAGE {page.page} ---\n{page.text}"
-            for page in current_pages
-        )
+        text = "\n\n".join(f"--- PAGE {page.page} ---\n{page.text}" for page in current_pages)
         start_page, end_page = current_pages[0].page, current_pages[-1].page
 
         documents.append(
@@ -143,9 +145,11 @@ def split_installation_manual_into_chunks(
 
     return documents
 
+
 # ============================================================
 # 4. Build Chroma collection
 # ============================================================
+
 
 def build_installation_manual_collection(
     pdf_paths: list[str],
@@ -207,21 +211,20 @@ def build_installation_manual_collection(
 
     return vector_db
 
+
 # ============================================================
 # 5. Main execution
 # ============================================================
 
 if __name__ == "__main__":
     installation_dir = DATA_DIR / "installation manuals"
-    maintenance_dir  = DATA_DIR / "maintainance manuals"
+    maintenance_dir = DATA_DIR / "maintainance manuals"
 
     installation_pdfs = sorted(str(p) for p in installation_dir.glob("*.pdf"))
-    maintenance_pdfs  = sorted(str(p) for p in maintenance_dir.glob("*.pdf"))
+    maintenance_pdfs = sorted(str(p) for p in maintenance_dir.glob("*.pdf"))
 
     if not installation_pdfs and not maintenance_pdfs:
-        raise FileNotFoundError(
-            f"No PDF files found in {installation_dir} or {maintenance_dir}."
-        )
+        raise FileNotFoundError(f"No PDF files found in {installation_dir} or {maintenance_dir}.")
 
     if installation_pdfs:
         build_installation_manual_collection(

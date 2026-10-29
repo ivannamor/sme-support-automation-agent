@@ -36,7 +36,7 @@ init_chat_session("client")
 render_page_header(t("client_title"))
 
 selected_model = render_sidebar("client")
-agent          = get_agent(selected_model, "client")
+agent = get_agent(selected_model, "client")
 
 with st.container(key="chat_zone", height="stretch"):
     render_client_pending_estimates()
@@ -47,7 +47,8 @@ with st.container(key="chat_zone", height="stretch"):
     render_booking_form(agent, selected_model)
 
     user_prompt = render_hitl_and_input(
-        agent, selected_model,
+        agent,
+        selected_model,
         prompt_hint=t("client_sub"),
     )
 

@@ -55,7 +55,8 @@ def load_all_chunks() -> list[str]:
     for collection_name in SOURCE_COLLECTIONS:
         try:
             store = Chroma(
-                persist_directory=DB_DIRECTORY, embedding_function=embeddings,
+                persist_directory=DB_DIRECTORY,
+                embedding_function=embeddings,
                 collection_name=collection_name,
             )
             data = store.get()
@@ -97,7 +98,7 @@ Definizione di "{term}":
 def extract_candidate_terms(chunks: list[str], llm) -> Counter:
     counts: Counter = Counter()
     for i in range(0, len(chunks), BATCH_SIZE):
-        batch_text = "\n\n---\n\n".join(chunks[i:i + BATCH_SIZE])[:6000]
+        batch_text = "\n\n---\n\n".join(chunks[i : i + BATCH_SIZE])[:6000]
         try:
             raw = llm.invoke(_TERM_EXTRACTION_PROMPT.format(chunk=batch_text)).content
         except Exception as exc:
@@ -107,8 +108,10 @@ def extract_candidate_terms(chunks: list[str], llm) -> Counter:
             term = line.strip(" -*\t").strip()
             if term and len(term) < 60:
                 counts[term.lower()] += 1
-        print(f"  batch {i // BATCH_SIZE + 1}/{(len(chunks) - 1) // BATCH_SIZE + 1} processed, "
-              f"{len(counts)} distinct candidate terms so far")
+        print(
+            f"  batch {i // BATCH_SIZE + 1}/{(len(chunks) - 1) // BATCH_SIZE + 1} processed, "
+            f"{len(counts)} distinct candidate terms so far"
+        )
     return counts
 
 
@@ -125,8 +128,10 @@ def main():
     print("Loading chunks from existing collections:")
     chunks = load_all_chunks()
     if not chunks:
-        print("No chunks found in any source collection — run the catalogue/installation/"
-              "maintenance ingestion scripts first.")
+        print(
+            "No chunks found in any source collection — run the catalogue/installation/"
+            "maintenance ingestion scripts first."
+        )
         return
 
     llm = get_llm(temperature=0, max_tokens=300)
@@ -150,7 +155,9 @@ def main():
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     print(f"\nWrote {len(records)} glossary entries to {GLOSSARY_PATH}")
-    print("Next: python ingestion/build_faq_and_glossary_rag.py  (to (re)build the glossary Chroma collection)")
+    print(
+        "Next: python ingestion/build_faq_and_glossary_rag.py  (to (re)build the glossary Chroma collection)"
+    )
 
 
 if __name__ == "__main__":

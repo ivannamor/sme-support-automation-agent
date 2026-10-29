@@ -21,7 +21,9 @@ class WebScrapingIngestionTests(unittest.TestCase):
     def test_load_urls_from_file_reads_lines_without_comments(self):
         with TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "urls.txt"
-            path.write_text("https://example.com/a\n# comment\nhttps://example.com/b\n", encoding="utf-8")
+            path.write_text(
+                "https://example.com/a\n# comment\nhttps://example.com/b\n", encoding="utf-8"
+            )
             urls = load_urls_from_file(path)
             self.assertEqual(urls, ["https://example.com/a", "https://example.com/b"])
 

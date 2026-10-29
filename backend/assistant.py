@@ -34,6 +34,7 @@ def _load_prompt(name: str) -> str:
     """Reads a system-prompt template (shared/client/installer/manager) from backend/prompts/."""
     return (PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
 
+
 _missing_secrets = check_required_secrets()
 if _missing_secrets:
     raise RuntimeError(
@@ -99,8 +100,10 @@ except ImportError as exc:
 # LOGGING
 # ============================================================
 
+
 class _RequestIdFilter(logging.Filter):
     """Injects the active request_id ContextVar into every log record."""
+
     def filter(self, record):
         record.request_id = request_id_var.get()
         return True
@@ -131,6 +134,7 @@ COMPANY_CONTEXT = COMPANY_CONTEXT
 # ============================================================
 # CALLBACK HANDLER
 # ============================================================
+
 
 class ToolCallCaptureHandler(BaseCallbackHandler):
     """Captures tool calls, rough token usage, and the root LangSmith run_id."""
@@ -167,9 +171,7 @@ class ToolCallCaptureHandler(BaseCallbackHandler):
                             "timestamp": datetime.datetime.now().isoformat(),
                         }
                         self.tool_calls.append(tool_entry)
-                        logger.info(
-                            f"[LLM_DECISION] Agent decided to use: {tool_entry['tool']}"
-                        )
+                        logger.info(f"[LLM_DECISION] Agent decided to use: {tool_entry['tool']}")
         except Exception as exc:
             logger.warning(f"[CALLBACK_CAPTURE_WARNING] Could not capture tool calls: {exc}")
 
@@ -217,7 +219,6 @@ class ToolCallCaptureHandler(BaseCallbackHandler):
         }
 
 
-
 def _empty_usage() -> dict[str, int]:
     return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
@@ -229,6 +230,7 @@ class TurnResult:
     once the stream is exhausted. The caller owns it — the agent is shared
     across sessions (st.cache_resource), so per-turn data must never live on it.
     """
+
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: dict[str, int] = field(default_factory=_empty_usage)
     run_id: str | None = None
@@ -238,6 +240,7 @@ class TurnResult:
 # ============================================================
 # ASSISTANT AGENT
 # ============================================================
+
 
 class DoorAssistantAgent:
     """
@@ -314,12 +317,14 @@ class DoorAssistantAgent:
     # and Claim buttons perform directly), so an extra confirm/cancel step
     # would just be a redundant second confirmation.
     _ROLE_MUTATING = {
-        "client":    {"request_site_survey_tool", "respond_to_estimate_tool"},
+        "client": {"request_site_survey_tool", "respond_to_estimate_tool"},
         "installer": {
-            "send_alert_to_manager_tool", "complete_job_tool",
-            "submit_survey_measurements_tool", "request_inventory_reservation_tool",
+            "send_alert_to_manager_tool",
+            "complete_job_tool",
+            "submit_survey_measurements_tool",
+            "request_inventory_reservation_tool",
         },
-        "manager":   {
+        "manager": {
             "book_installation_tool",
             "update_installation_costs_tool",
             "send_estimate_to_client_tool",
@@ -395,13 +400,13 @@ class DoorAssistantAgent:
 
         try:
             # Use a dedicated non-streaming LLM so `self.llm` state never affects the guard.
-            guard_llm = get_llm(model_name=self.model_name, temperature=0, max_tokens=10, streaming=False)
+            guard_llm = get_llm(
+                model_name=self.model_name, temperature=0, max_tokens=10, streaming=False
+            )
             raw = guard_llm.invoke(guard_prompt).content
             # Handle models that return content as a list of blocks.
             if isinstance(raw, list):
-                raw = " ".join(
-                    b.get("text", "") if isinstance(b, dict) else str(b) for b in raw
-                )
+                raw = " ".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in raw)
             text = str(raw).strip().upper()
             # Check UNSAFE before SAFE because "UNSAFE" contains "SAFE".
             if "UNSAFE" in text:
@@ -415,7 +420,9 @@ class DoorAssistantAgent:
             logger.error(f"[GUARD_FAILURE] {exc}")
             return False
 
-    def _graph_config(self, thread_id: str, handler: ToolCallCaptureHandler, request_id: str) -> dict:
+    def _graph_config(
+        self, thread_id: str, handler: ToolCallCaptureHandler, request_id: str
+    ) -> dict:
         return {
             "configurable": {"thread_id": thread_id},
             "callbacks": [handler],
@@ -436,7 +443,9 @@ class DoorAssistantAgent:
             return
 
         yield from self._stream(
-            {"messages": [HumanMessage(content=query)]}, thread_id, result,
+            {"messages": [HumanMessage(content=query)]},
+            thread_id,
+            result,
             label="STREAM",
             error_text="\n\n❌ Technical issue encountered while generating the response.",
         )
@@ -448,7 +457,9 @@ class DoorAssistantAgent:
         decision: "confirmed" or "rejected"
         """
         yield from self._stream(
-            Command(resume=decision), thread_id, result,
+            Command(resume=decision),
+            thread_id,
+            result,
             label=f"RESUME_{decision.upper()}",
             error_text="\n\n❌ Technical issue encountered while resuming.",
         )
@@ -503,6 +514,7 @@ class DoorAssistantAgent:
 # ============================================================
 # FACTORY
 # ============================================================
+
 
 def initialize_agent(model_name: str | None = None, role: str = "manager") -> DoorAssistantAgent:
     """

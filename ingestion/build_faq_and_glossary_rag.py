@@ -30,9 +30,7 @@ def load_jsonl(file_path: str) -> list[dict[str, Any]]:
             try:
                 records.append(json.loads(line))
             except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"Invalid JSON on line {line_number} in {file_path}"
-                ) from exc
+                raise ValueError(f"Invalid JSON on line {line_number} in {file_path}") from exc
 
     return records
 
@@ -43,11 +41,7 @@ def record_to_text(record: dict[str, Any]) -> str:
     No hardcoded keys.
     """
 
-    return json.dumps(
-        record,
-        ensure_ascii=False,
-        indent=2
-    )
+    return json.dumps(record, ensure_ascii=False, indent=2)
 
 
 def jsonl_to_documents(
@@ -60,11 +54,7 @@ def jsonl_to_documents(
     documents = []
 
     for i, record in enumerate(records):
-        page_content = (
-            f"Source type: {source_type}\n"
-            f"Record number: {i}\n\n"
-            f"{record_to_text(record)}"
-        )
+        page_content = f"Source type: {source_type}\nRecord number: {i}\n\n{record_to_text(record)}"
 
         metadata = {
             "source": source_name,
@@ -111,7 +101,6 @@ def build_jsonl_collection(
 
 
 if __name__ == "__main__":
-
     json_faq_path = DATA_DIR / "faqs" / "faq.jsonl"
     json_glossary_path = DATA_DIR / "glossary" / "glossary.jsonl"
 
