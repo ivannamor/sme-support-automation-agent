@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Ruff needs no project dependencies; pin it to the version in requirements-dev.txt.
+      - run: pip install "$(grep '^ruff==' requirements-dev.txt)"
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # backend.llm_provider / backend.assistant require these at import time.
+      # Tests never call a real API, so dummy values are enough.
+      OPENAI_API_KEY: sk-dummy
+      OPENROUTER_API_KEY: sk-dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: mypy (backend, blocking)
+        run: mypy
+      - name: mypy (rest of the codebase, informative)
+        continue-on-error: true
+        run: mypy app rag ingestion evaluation scripts utils tools.py run.py
+      - run: pytest

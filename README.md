@@ -174,22 +174,24 @@ OPENROUTER_MODEL=openai/gpt-4o-mini
 
 ## Build Local Data
 
-Run once (and again whenever source content changes):
+Run once (and again whenever source content changes), from the project root.
+Scripts are run as modules (`python -m package.module`), which puts the
+project root on the import path:
 
 ```powershell
 # 1. Derive the product/category section map from data/website.txt
-.venv\Scripts\python.exe ingestion\build_catalogue_sections.py
+.venv\Scripts\python.exe -m ingestion.build_catalogue_sections
 
 # 2. Seed/update the SQLite database (users, inventory, tickets schema, costs)
-.venv\Scripts\python.exe backend\database.py
+.venv\Scripts\python.exe -m backend.database
 
 # 3. Build the RAG collections (each clears and rebuilds its own Chroma collection)
-.venv\Scripts\python.exe ingestion\build_catalogue_rag.py
-.venv\Scripts\python.exe ingestion\build_installation_rag.py    # builds BOTH installation_guides and maintenance_guides
+.venv\Scripts\python.exe -m ingestion.build_catalogue_rag
+.venv\Scripts\python.exe -m ingestion.build_installation_rag    # builds BOTH installation_guides and maintenance_guides
 
 # 4. Optional — (re)generate the glossary from the content ingested in step 3, then load it
-.venv\Scripts\python.exe ingestion\build_glossary_content.py
-.venv\Scripts\python.exe ingestion\build_faq_and_glossary_rag.py
+.venv\Scripts\python.exe -m ingestion.build_glossary_content
+.venv\Scripts\python.exe -m ingestion.build_faq_and_glossary_rag
 ```
 
 Notes:
@@ -255,12 +257,12 @@ docker compose up -d
 **First run only — build the local data inside the container's mounted volumes:**
 
 ```powershell
-docker compose run --rm app python ingestion/build_catalogue_sections.py
-docker compose run --rm app python backend/database.py
-docker compose run --rm app python ingestion/build_catalogue_rag.py
-docker compose run --rm app python ingestion/build_installation_rag.py
-docker compose run --rm app python ingestion/build_glossary_content.py
-docker compose run --rm app python ingestion/build_faq_and_glossary_rag.py
+docker compose run --rm app python -m ingestion.build_catalogue_sections
+docker compose run --rm app python -m backend.database
+docker compose run --rm app python -m ingestion.build_catalogue_rag
+docker compose run --rm app python -m ingestion.build_installation_rag
+docker compose run --rm app python -m ingestion.build_glossary_content
+docker compose run --rm app python -m ingestion.build_faq_and_glossary_rag
 ```
 
 These write into `./db` and `./sections` on the host (via the bind mounts), so
@@ -286,12 +288,25 @@ container restart.
   service's container name (e.g. `http://api:8000`), and give both the same
   `INVENTORY_API_KEY`. Keep port 8000 on the internal network only.
 
-## Testing
+## Development
+
+Dev tools (pytest, ruff, mypy) are pinned in `requirements-dev.txt` and
+configured in `pyproject.toml`:
 
 ```powershell
-pip install pytest pytest-mock
-pytest tests/
+pip install -r requirements-dev.txt
+
+ruff check .          # lint
+ruff format .         # format
+mypy                  # type-check backend/
+pytest                # tests
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs all four on every push to
+`main` and every pull request. The mypy check on `backend/` is blocking; the
+rest of the codebase is type-checked too, but only reported, not enforced.
+
+## Testing
 
 The suite (`tests/conftest.py` + `tests/test_*.py`) covers `backend/graph.py`
 (routing helpers plus full integration tests of all four HITL paths, using a
@@ -307,7 +322,7 @@ opened by the test suite.
 ## RAG Quality Evaluation (RAGAS)
 
 ```powershell
-python evaluation/evaluate_rag.py
+python -m evaluation.evaluate_rag
 ```
 
 Runs a hand-written golden question set (grounded in the real ingested

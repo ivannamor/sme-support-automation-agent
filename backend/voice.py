@@ -3,8 +3,8 @@ Voice utilities: Speech-to-Text (Whisper) and Text-to-Speech (OpenAI TTS).
 """
 
 import io
-import re
 import logging
+import re
 
 from backend.secrets_provider import get_secret
 
@@ -21,6 +21,7 @@ def transcribe_audio(audio_bytes: bytes) -> str:
     Raises on API error.
     """
     from openai import OpenAI
+
     client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
 
     audio_file = io.BytesIO(audio_bytes)
@@ -42,6 +43,7 @@ def text_to_speech(text: str, voice: str = TTS_DEFAULT_VOICE) -> bytes:
     Raises on API error.
     """
     from openai import OpenAI
+
     client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
 
     clean = _clean_for_tts(text)

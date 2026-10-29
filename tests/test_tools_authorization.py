@@ -32,8 +32,12 @@ def as_client():
 
 def _awaiting_client_ticket(client_email: str) -> int:
     bid = db.create_pending_booking(
-        model="IRIS", date_str="2026-08-01", time_str="10:00", ticket_phase="survey",
-        client_email=client_email, client_address="Via Roma 1",
+        model="IRIS",
+        date_str="2026-08-01",
+        time_str="10:00",
+        ticket_phase="survey",
+        client_email=client_email,
+        client_address="Via Roma 1",
     )
     db.resolve_booking(bid, "approved", "manager1")
     db.claim_booking(bid, "inst_owner")
@@ -43,6 +47,7 @@ def _awaiting_client_ticket(client_email: str) -> int:
 
 
 # ── client: find_my_tickets_by_email_tool ─────────────────────────────────────
+
 
 def test_find_my_tickets_requires_verified_email(test_db, as_client):
     _awaiting_client_ticket("mario@example.com")
@@ -68,6 +73,7 @@ def test_find_my_tickets_ignores_llm_supplied_email(test_db, as_client):
 
 
 # ── client: respond_to_estimate_tool ──────────────────────────────────────────
+
 
 def test_respond_to_estimate_requires_verified_email(test_db, as_client):
     bid = _awaiting_client_ticket("mario@example.com")
@@ -106,13 +112,18 @@ def test_respond_to_estimate_owner_can_accept(test_db, as_client, monkeypatch):
     as_client("mario@example.com")
     monkeypatch.setattr(tools, "_compute_travel", lambda addr: {"duration_hours": 0.5})
     monkeypatch.setattr(
-        tools, "book_installation_tool",
+        tools,
+        "book_installation_tool",
         type("FakeBooking", (), {"invoke": staticmethod(lambda args: "CONFIRMED: booked.")})(),
     )
-    result = tools.respond_to_estimate_tool.invoke({
-        "booking_id": bid, "response": "accept",
-        "new_date_str": "2030-01-10", "new_time_str": "09:00",
-    })
+    result = tools.respond_to_estimate_tool.invoke(
+        {
+            "booking_id": bid,
+            "response": "accept",
+            "new_date_str": "2030-01-10",
+            "new_time_str": "09:00",
+        }
+    )
     assert "accepted" in result
     booking = db.get_booking(bid)
     assert booking["ticket_status"] == "open"
@@ -121,9 +132,13 @@ def test_respond_to_estimate_owner_can_accept(test_db, as_client, monkeypatch):
 
 # ── installer: ownership of booking_id ────────────────────────────────────────
 
+
 def _open_ticket() -> int:
     bid = db.create_pending_booking(
-        model="IRIS", date_str="2026-08-01", time_str="10:00", ticket_phase="installation",
+        model="IRIS",
+        date_str="2026-08-01",
+        time_str="10:00",
+        ticket_phase="installation",
         client_email="mario@example.com",
     )
     db.resolve_booking(bid, "approved", "manager1")

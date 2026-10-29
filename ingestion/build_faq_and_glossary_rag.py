@@ -1,31 +1,26 @@
-import os
-import sys
 import json
-from typing import List, Dict, Any
+import os
+from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
-from langchain_core.documents import Document
 from langchain_chroma import Chroma
-from pathlib import Path
+from langchain_core.documents import Document
+
+from backend.company_config import COMPANY_CONTEXT
+from backend.llm_provider import get_embeddings
 
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from backend.llm_provider import get_embeddings
-from backend.company_config import COMPANY_CONTEXT
-
 DATA_DIR = PROJECT_ROOT / "data"
 DB_DIRECTORY = PROJECT_ROOT / "db" / "company_rag_db"
 
 
-def load_jsonl(file_path: str) -> List[Dict[str, Any]]:
+def load_jsonl(file_path: str) -> list[dict[str, Any]]:
     records = []
 
-    with open(file_path, "r", encoding="utf-8") as file:
+    with open(file_path, encoding="utf-8") as file:
         for line_number, line in enumerate(file, start=1):
             line = line.strip()
 
@@ -35,41 +30,31 @@ def load_jsonl(file_path: str) -> List[Dict[str, Any]]:
             try:
                 records.append(json.loads(line))
             except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"Invalid JSON on line {line_number} in {file_path}"
-                ) from exc
+                raise ValueError(f"Invalid JSON on line {line_number} in {file_path}") from exc
 
     return records
 
 
-def record_to_text(record: Dict[str, Any]) -> str:
+def record_to_text(record: dict[str, Any]) -> str:
     """
     Schema-agnostic conversion.
     No hardcoded keys.
     """
 
-    return json.dumps(
-        record,
-        ensure_ascii=False,
-        indent=2
-    )
+    return json.dumps(record, ensure_ascii=False, indent=2)
 
 
 def jsonl_to_documents(
     file_path: str,
     source_type: str,
-) -> List[Document]:
+) -> list[Document]:
     records = load_jsonl(file_path)
     source_name = os.path.basename(file_path)
 
     documents = []
 
     for i, record in enumerate(records):
-        page_content = (
-            f"Source type: {source_type}\n"
-            f"Record number: {i}\n\n"
-            f"{record_to_text(record)}"
-        )
+        page_content = f"Source type: {source_type}\nRecord number: {i}\n\n{record_to_text(record)}"
 
         metadata = {
             "source": source_name,
@@ -116,7 +101,6 @@ def build_jsonl_collection(
 
 
 if __name__ == "__main__":
-
     json_faq_path = DATA_DIR / "faqs" / "faq.jsonl"
     json_glossary_path = DATA_DIR / "glossary" / "glossary.jsonl"
 

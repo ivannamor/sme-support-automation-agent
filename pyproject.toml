@@ -1,0 +1,54 @@
+[project]
+name = "ai-door-window-agent"
+version = "0.1.0"
+description = "AI assistant for a door/window company: client, installer and manager agents over a RAG knowledge base."
+requires-python = ">=3.12"
+
+# Runtime dependencies live in requirements.txt, dev tools in
+# requirements-dev.txt. This file only configures the tooling. Modules are run
+# from the project root with `python -m <package>.<module>`, so nothing needs
+# to be installed for imports to resolve.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["db", "data", "sections", "logs", ".langgraph_api"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes: unused imports/variables, undefined names
+    "I",   # isort: import ordering
+    "B",   # bugbear: common Python pitfalls
+    "UP",  # pyupgrade: modern syntax for the target Python version
+    "SIM", # simplify
+]
+# Line length is left to `ruff format`; what it can't wrap (long strings and
+# prompts) isn't worth contorting.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Streamlit runs these files as scripts, so they still bootstrap sys.path
+# before importing project modules. TODO PR 11: drop with the app/ restructure.
+# Nested `with` blocks mirror the Streamlit layout (column > container >
+# expander), so they are kept rather than merged.
+"app/**" = ["E402", "SIM117"]
+
+[tool.mypy]
+python_version = "3.12"
+# No __init__.py files: packages are namespace packages rooted at the project.
+explicit_package_bases = true
+ignore_missing_imports = true
+# `mypy` with no arguments checks backend/ only — the blocking CI gate.
+files = ["backend"]
+
+[[tool.mypy.overrides]]
+# Modules backend/ imports from outside its own package: type-check them only
+# when they are named on the command line (the informative CI job), so their
+# errors don't fail the blocking backend check.
+module = ["tools", "rag.*"]
+follow_imports = "silent"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

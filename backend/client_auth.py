@@ -22,7 +22,6 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 from backend.company_config import COMPANY_CONTEXT
 from backend.database import get_connection
@@ -56,14 +55,14 @@ def is_demo_mode() -> bool:
 
 def _hash_code(email: str, code: str) -> str:
     # Bound to the email so a hash can't be replayed for another address.
-    return hashlib.sha256(f"{email}:{code}".encode("utf-8")).hexdigest()
+    return hashlib.sha256(f"{email}:{code}".encode()).hexdigest()
 
 
 @dataclass
 class CodeRequestResult:
     # "sent" | "demo" | "cooldown" | "invalid_email" | "email_unavailable"
     status: str
-    demo_code: Optional[str] = None  # only set when status == "demo"
+    demo_code: str | None = None  # only set when status == "demo"
 
 
 def request_code(email: str) -> CodeRequestResult:

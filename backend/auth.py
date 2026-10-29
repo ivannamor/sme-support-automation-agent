@@ -6,8 +6,8 @@ Installers and managers authenticate with username + bcrypt password.
 """
 
 import bcrypt
-from typing import Optional
-from backend.database import get_user, create_user
+
+from backend.database import create_user, get_user
 
 
 def hash_password(plain: str) -> str:
@@ -21,7 +21,7 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def authenticate(username: str, password: str) -> Optional[str]:
+def authenticate(username: str, password: str) -> str | None:
     """
     Returns the user's role string ('installer' or 'manager') on success,
     or None if credentials are invalid.

@@ -1,14 +1,9 @@
 import json
-import sys
 from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from ingestion.webscraping_utils import load_urls_from_file, product_name_from_url
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 WEBSITE_URLS_PATH = DATA_DIR / "website.txt"
 CATALOGUE_SECTIONS_PATH = PROJECT_ROOT / "sections" / "catalogue" / "catalogue_sections.json"
@@ -44,7 +39,9 @@ def main() -> None:
         json.dump(sections, file, ensure_ascii=False, indent=2)
 
     product_count = sum(1 for section in sections if section["doc_type"] == "product")
-    print(f"Wrote {len(sections)} sections ({product_count} products) to: {CATALOGUE_SECTIONS_PATH}")
+    print(
+        f"Wrote {len(sections)} sections ({product_count} products) to: {CATALOGUE_SECTIONS_PATH}"
+    )
 
 
 if __name__ == "__main__":

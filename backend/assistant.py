@@ -1,25 +1,23 @@
-import sys
 import datetime
 import logging
-import uuid
 import time
 import traceback
+import uuid
 from dataclasses import dataclass, field
+from logging.handlers import RotatingFileHandler as _RotatingFileHandler
 from pathlib import Path
-from typing import List, Tuple, Dict, Any, Optional
+from typing import Any
 
-from langchain_core.messages import HumanMessage, AIMessage, AIMessageChunk
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.messages import AIMessageChunk, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from backend.graph import build_graph
 from backend.company_config import COMPANY_CONTEXT
-
-from backend.llm_provider import get_llm, get_model_info, DEFAULT_MODEL
+from backend.graph import build_graph
+from backend.llm_provider import DEFAULT_MODEL, get_llm, get_model_info
 from backend.log_context import request_id_var
 from backend.secrets_provider import check_required_secrets
-
 
 # ============================================================
 # PROJECT PATHS
@@ -36,9 +34,6 @@ def _load_prompt(name: str) -> str:
     """Reads a system-prompt template (shared/client/installer/manager) from backend/prompts/."""
     return (PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
 
-# Ensure imports work when this file is executed directly from backend/
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 _missing_secrets = check_required_secrets()
 if _missing_secrets:
@@ -55,44 +50,44 @@ if _missing_secrets:
 
 try:
     from tools import (
-        search_technical_manuals,
-        search_installation_manuals_tool,
-        inventory_api_tool,
-        check_calendar_availability_tool,
+        approve_booking_tool,
+        approve_job_tool,
+        approve_qa_tool,
+        approve_reservation_tool,
+        approve_survey_estimate_tool,
         book_installation_tool,
         calculate_travel_time_tool,
+        check_calendar_availability_tool,
+        claim_installation_tool,
+        complete_job_tool,
+        edit_ticket_tool,
+        find_my_tickets_by_email_tool,
+        general_door_knowledge_tool,
+        get_my_ticket_status_tool,
+        get_ticket_status_tool,
+        inventory_api_tool,
+        list_my_installations_tool,
+        list_pending_bookings_tool,
+        list_pending_jobs_tool,
+        list_pending_qa_tool,
+        list_pending_reservations_tool,
+        list_pending_survey_reports_tool,
+        price_estimate_tool,
+        reject_booking_tool,
+        reject_job_tool,
+        reject_qa_tool,
+        reject_reservation_tool,
+        reject_survey_estimate_tool,
+        release_installation_tool,
+        request_inventory_reservation_tool,
         request_site_survey_tool,
         respond_to_estimate_tool,
-        find_my_tickets_by_email_tool,
-        request_inventory_reservation_tool,
-        list_pending_reservations_tool,
-        approve_reservation_tool,
-        reject_reservation_tool,
+        search_installation_manuals_tool,
+        search_technical_manuals,
         send_alert_to_manager_tool,
-        price_estimate_tool,
-        update_installation_costs_tool,
-        complete_job_tool,
-        submit_survey_measurements_tool,
         send_estimate_to_client_tool,
-        general_door_knowledge_tool,
-        list_my_installations_tool,
-        claim_installation_tool,
-        release_installation_tool,
-        get_ticket_status_tool,
-        get_my_ticket_status_tool,
-        edit_ticket_tool,
-        list_pending_bookings_tool,
-        list_pending_qa_tool,
-        list_pending_jobs_tool,
-        list_pending_survey_reports_tool,
-        approve_booking_tool,
-        reject_booking_tool,
-        approve_qa_tool,
-        reject_qa_tool,
-        approve_job_tool,
-        reject_job_tool,
-        approve_survey_estimate_tool,
-        reject_survey_estimate_tool,
+        submit_survey_measurements_tool,
+        update_installation_costs_tool,
     )
 except ImportError as exc:
     raise ImportError(
@@ -105,11 +100,10 @@ except ImportError as exc:
 # LOGGING
 # ============================================================
 
-from logging.handlers import RotatingFileHandler as _RotatingFileHandler
-
 
 class _RequestIdFilter(logging.Filter):
     """Injects the active request_id ContextVar into every log record."""
+
     def filter(self, record):
         record.request_id = request_id_var.get()
         return True
@@ -141,14 +135,15 @@ COMPANY_CONTEXT = COMPANY_CONTEXT
 # CALLBACK HANDLER
 # ============================================================
 
+
 class ToolCallCaptureHandler(BaseCallbackHandler):
     """Captures tool calls, rough token usage, and the root LangSmith run_id."""
 
-    def __init__(self):
-        self.tool_calls: List[Dict[str, Any]] = []
+    def __init__(self) -> None:
+        self.tool_calls: list[dict[str, Any]] = []
         self.total_input_tokens = 0
         self.total_output_tokens = 0
-        self.root_run_id: Optional[str] = None
+        self.root_run_id: str | None = None
 
     def on_chain_start(self, serialized, inputs, *, run_id, parent_run_id=None, **kwargs):
         """Capture the root run_id (the one with no parent) for LangSmith feedback."""
@@ -176,9 +171,7 @@ class ToolCallCaptureHandler(BaseCallbackHandler):
                             "timestamp": datetime.datetime.now().isoformat(),
                         }
                         self.tool_calls.append(tool_entry)
-                        logger.info(
-                            f"[LLM_DECISION] Agent decided to use: {tool_entry['tool']}"
-                        )
+                        logger.info(f"[LLM_DECISION] Agent decided to use: {tool_entry['tool']}")
         except Exception as exc:
             logger.warning(f"[CALLBACK_CAPTURE_WARNING] Could not capture tool calls: {exc}")
 
@@ -215,10 +208,10 @@ class ToolCallCaptureHandler(BaseCallbackHandler):
     def on_llm_new_token(self, token, *, run_id, parent_run_id=None, **kwargs):
         self.total_output_tokens += 1
 
-    def get_tool_calls(self) -> List[Dict[str, Any]]:
+    def get_tool_calls(self) -> list[dict[str, Any]]:
         return self.tool_calls
 
-    def get_usage(self) -> Dict[str, int]:
+    def get_usage(self) -> dict[str, int]:
         return {
             "input_tokens": self.total_input_tokens,
             "output_tokens": self.total_output_tokens,
@@ -226,8 +219,7 @@ class ToolCallCaptureHandler(BaseCallbackHandler):
         }
 
 
-
-def _empty_usage() -> Dict[str, int]:
+def _empty_usage() -> dict[str, int]:
     return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 
@@ -238,15 +230,17 @@ class TurnResult:
     once the stream is exhausted. The caller owns it — the agent is shared
     across sessions (st.cache_resource), so per-turn data must never live on it.
     """
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-    usage: Dict[str, int] = field(default_factory=_empty_usage)
-    run_id: Optional[str] = None
-    interrupt: Optional[dict] = None  # non-None when the graph is paused for HITL
+
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    usage: dict[str, int] = field(default_factory=_empty_usage)
+    run_id: str | None = None
+    interrupt: dict | None = None  # non-None when the graph is paused for HITL
 
 
 # ============================================================
 # ASSISTANT AGENT
 # ============================================================
+
 
 class DoorAssistantAgent:
     """
@@ -323,12 +317,14 @@ class DoorAssistantAgent:
     # and Claim buttons perform directly), so an extra confirm/cancel step
     # would just be a redundant second confirmation.
     _ROLE_MUTATING = {
-        "client":    {"request_site_survey_tool", "respond_to_estimate_tool"},
+        "client": {"request_site_survey_tool", "respond_to_estimate_tool"},
         "installer": {
-            "send_alert_to_manager_tool", "complete_job_tool",
-            "submit_survey_measurements_tool", "request_inventory_reservation_tool",
+            "send_alert_to_manager_tool",
+            "complete_job_tool",
+            "submit_survey_measurements_tool",
+            "request_inventory_reservation_tool",
         },
-        "manager":   {
+        "manager": {
             "book_installation_tool",
             "update_installation_costs_tool",
             "send_estimate_to_client_tool",
@@ -338,7 +334,7 @@ class DoorAssistantAgent:
         # approve/reject_survey_estimate_tool deliberately excluded — same reasoning as above.
     }
 
-    def __init__(self, model_name: str = None, role: str = "manager"):
+    def __init__(self, model_name: str | None = None, role: str = "manager"):
         self.model_name = model_name or DEFAULT_MODEL
         self.role = role
         self.llm = get_llm(
@@ -404,13 +400,13 @@ class DoorAssistantAgent:
 
         try:
             # Use a dedicated non-streaming LLM so `self.llm` state never affects the guard.
-            guard_llm = get_llm(model_name=self.model_name, temperature=0, max_tokens=10, streaming=False)
+            guard_llm = get_llm(
+                model_name=self.model_name, temperature=0, max_tokens=10, streaming=False
+            )
             raw = guard_llm.invoke(guard_prompt).content
             # Handle models that return content as a list of blocks.
             if isinstance(raw, list):
-                raw = " ".join(
-                    b.get("text", "") if isinstance(b, dict) else str(b) for b in raw
-                )
+                raw = " ".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in raw)
             text = str(raw).strip().upper()
             # Check UNSAFE before SAFE because "UNSAFE" contains "SAFE".
             if "UNSAFE" in text:
@@ -424,7 +420,9 @@ class DoorAssistantAgent:
             logger.error(f"[GUARD_FAILURE] {exc}")
             return False
 
-    def _graph_config(self, thread_id: str, handler: ToolCallCaptureHandler, request_id: str) -> dict:
+    def _graph_config(
+        self, thread_id: str, handler: ToolCallCaptureHandler, request_id: str
+    ) -> dict:
         return {
             "configurable": {"thread_id": thread_id},
             "callbacks": [handler],
@@ -445,7 +443,9 @@ class DoorAssistantAgent:
             return
 
         yield from self._stream(
-            {"messages": [HumanMessage(content=query)]}, thread_id, result,
+            {"messages": [HumanMessage(content=query)]},
+            thread_id,
+            result,
             label="STREAM",
             error_text="\n\n❌ Technical issue encountered while generating the response.",
         )
@@ -457,7 +457,9 @@ class DoorAssistantAgent:
         decision: "confirmed" or "rejected"
         """
         yield from self._stream(
-            Command(resume=decision), thread_id, result,
+            Command(resume=decision),
+            thread_id,
+            result,
             label=f"RESUME_{decision.upper()}",
             error_text="\n\n❌ Technical issue encountered while resuming.",
         )
@@ -498,7 +500,7 @@ class DoorAssistantAgent:
             result.run_id = handler.root_run_id
             result.interrupt = self._get_interrupt(thread_id)
 
-    def _get_interrupt(self, thread_id: str) -> Optional[dict]:
+    def _get_interrupt(self, thread_id: str) -> dict | None:
         """Returns the first pending interrupt payload, or None."""
         try:
             state = self.executor.get_state({"configurable": {"thread_id": thread_id}})
@@ -513,7 +515,8 @@ class DoorAssistantAgent:
 # FACTORY
 # ============================================================
 
-def initialize_agent(model_name: str = None, role: str = "manager") -> DoorAssistantAgent:
+
+def initialize_agent(model_name: str | None = None, role: str = "manager") -> DoorAssistantAgent:
     """
     Initialize the door assistant agent for a given role.
 

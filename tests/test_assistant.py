@@ -8,7 +8,6 @@ A routing fake chat model replaces the real LLM; no API calls are made.
 import datetime
 import threading
 import types
-from typing import List, Optional
 
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -18,14 +17,18 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 import backend.assistant as assistant
 from backend.assistant import DoorAssistantAgent, TurnResult
 
-
 _SURVEY_CALL = {
     "name": "request_site_survey_tool",
     "id": "call_survey",
     "args": {
-        "model": "IRIS", "quantity": 1, "date_str": "2030-01-01", "time_str": "10:00",
-        "client_name": "Alice", "client_email": "alice@example.com",
-        "client_phone": "1", "client_address": "Via A 1",
+        "model": "IRIS",
+        "quantity": 1,
+        "date_str": "2030-01-01",
+        "time_str": "10:00",
+        "client_name": "Alice",
+        "client_email": "alice@example.com",
+        "client_phone": "1",
+        "client_address": "Via A 1",
     },
 }
 
@@ -38,8 +41,9 @@ class RoutingFakeChatModel(BaseChatModel):
     waits on a barrier so concurrent turns are guaranteed to overlap, and
     records every system prompt it receives.
     """
-    barrier: Optional[threading.Barrier] = None
-    system_prompts: List[str] = []
+
+    barrier: threading.Barrier | None = None
+    system_prompts: list[str] = []
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -47,7 +51,9 @@ class RoutingFakeChatModel(BaseChatModel):
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
-        self.system_prompts.append(next(m.content for m in messages if isinstance(m, SystemMessage)))
+        self.system_prompts.append(
+            next(m.content for m in messages if isinstance(m, SystemMessage))
+        )
         if self.barrier:
             self.barrier.wait()
         last = messages[-1]
@@ -68,6 +74,7 @@ def make_agent(monkeypatch):
         monkeypatch.setattr(assistant, "get_llm", lambda **kwargs: llm)
         monkeypatch.setattr(DoorAssistantAgent, "is_input_safe", lambda self, q: True)
         return DoorAssistantAgent(role="client")
+
     return _make
 
 

@@ -20,8 +20,8 @@ from backend.secrets_provider import get_secret
 
 logger = logging.getLogger("EmailUtils")
 
-SMTP_HOST     = get_secret("SMTP_HOST", "")
-SMTP_PORT     = int(get_secret("SMTP_PORT", "587"))
+SMTP_HOST = get_secret("SMTP_HOST", "")
+SMTP_PORT = int(get_secret("SMTP_PORT", "587"))
 SMTP_USERNAME = get_secret("SMTP_USERNAME", "")
 SMTP_PASSWORD = get_secret("SMTP_PASSWORD", "")
 MANAGER_EMAIL = get_secret("MANAGER_EMAIL", "")
@@ -53,8 +53,8 @@ def send_email(to: str, subject: str, body: str) -> bool:
 
     try:
         msg = MIMEMultipart()
-        msg["From"]    = SMTP_USERNAME
-        msg["To"]      = to
+        msg["From"] = SMTP_USERNAME
+        msg["To"] = to
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain", "utf-8"))
 

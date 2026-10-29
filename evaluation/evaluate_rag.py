@@ -3,7 +3,7 @@ Standalone RAGAS evaluation of the RAG pipeline (rag/rag_engine.py).
 
 Run manually — never from tests/CI:
 
-    python evaluation/evaluate_rag.py
+    python -m evaluation.evaluate_rag
 
 Every run makes real LLM calls, both to answer the golden questions (via the
 actual production pipeline) and to judge them (RAGAS' own LLM-as-judge
@@ -22,21 +22,15 @@ Review the generated answers in evaluation/last_run.json by hand — that's the
 whole point of self-referencing instead of skipping the golden set entirely.
 """
 
-import json
-import sys
 from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from ragas import evaluate
 from ragas.dataset_schema import EvaluationDataset, SingleTurnSample
-from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
-from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.llms import LangchainLLMWrapper
+from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
 
-from backend.llm_provider import get_llm, get_embeddings
+from backend.llm_provider import get_embeddings, get_llm
 from rag.rag_engine import get_assistant_response
 
 GOLDEN_QUESTIONS = [
@@ -70,21 +64,27 @@ def build_dataset() -> EvaluationDataset:
     for question in GOLDEN_QUESTIONS:
         answer, docs = get_assistant_response(question)
         contexts = [d.page_content for d in docs] or ["(no context retrieved)"]
-        samples.append(SingleTurnSample(
-            user_input=question,
-            response=answer,
-            retrieved_contexts=contexts,
-            reference=answer,
-        ))
+        samples.append(
+            SingleTurnSample(
+                user_input=question,
+                response=answer,
+                retrieved_contexts=contexts,
+                reference=answer,
+            )
+        )
         print(f"  answered: {question[:60]}...")
     return EvaluationDataset.from_list([s.model_dump() for s in samples])
 
 
 def main():
-    print(f"Building golden dataset ({len(GOLDEN_QUESTIONS)} questions) — this runs the real RAG pipeline for each one:")
+    print(
+        f"Building golden dataset ({len(GOLDEN_QUESTIONS)} questions) — this runs the real RAG pipeline for each one:"
+    )
     dataset = build_dataset()
 
-    print("\nRunning RAGAS evaluation (faithfulness, answer relevancy, context precision/recall)...")
+    print(
+        "\nRunning RAGAS evaluation (faithfulness, answer relevancy, context precision/recall)..."
+    )
     # RAGAS' own judge prompts (claim decomposition, multi-step scoring) need
     # more headroom than get_llm's default max_tokens=700 — a truncated judge
     # response raises LLMDidNotFinishException and that sub-score silently
@@ -100,7 +100,11 @@ def main():
     )
 
     df = result.to_pandas()
-    metric_cols = [c for c in ("faithfulness", "answer_relevancy", "context_precision", "context_recall") if c in df.columns]
+    metric_cols = [
+        c
+        for c in ("faithfulness", "answer_relevancy", "context_precision", "context_recall")
+        if c in df.columns
+    ]
 
     print("\n" + "=" * 60)
     print(f"RAGAS Evaluation Report — {len(GOLDEN_QUESTIONS)} questions")

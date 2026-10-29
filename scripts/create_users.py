@@ -2,23 +2,17 @@
 One-time setup script: creates initial installer and manager accounts.
 
 Usage:
-    .venv\Scripts\python.exe scripts\create_users.py
+    .venv\Scripts\python.exe -m scripts.create_users
 """
 
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from backend.database import init_db
 from backend.auth import register_user
+from backend.database import init_db
 
 init_db()
 
 USERS = [
     ("installer", "change-me", "installer"),
-    ("manager",   "change-me",   "manager"),
+    ("manager", "change-me", "manager"),
 ]
 
 for username, password, role in USERS:

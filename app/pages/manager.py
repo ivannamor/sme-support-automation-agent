@@ -2,43 +2,64 @@
 Manager page — ticket dashboard (tickets/clients/alerts/cache/analytics) + chat.
 """
 
-import sys
 import datetime
+import sys
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
+# TODO PR 11: drop with the app/ restructure (imports ui_shared as top-level).
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-APP_DIR      = Path(__file__).resolve().parents[1]
+APP_DIR = Path(__file__).resolve().parents[1]
 for p in (str(PROJECT_ROOT), str(APP_DIR)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
 from ui_shared import (
-    require_auth, get_agent, init_chat_session, t,
-    render_sidebar, render_chat_history,
-    render_hitl_and_input, handle_user_turn,
-    render_page_header, render_ticket_card, ticket_code, render_stat_tiles,
-    render_ticket_map, render_ticket_summary, render_column_resize_handle,
+    get_agent,
+    handle_user_turn,
+    init_chat_session,
     render_chat_autoscroll,
+    render_chat_history,
+    render_column_resize_handle,
+    render_hitl_and_input,
+    render_page_header,
+    render_sidebar,
+    render_stat_tiles,
+    render_ticket_card,
+    render_ticket_map,
+    render_ticket_summary,
+    require_auth,
+    t,
+    ticket_code,
 )
+
 from backend.database import (
-    get_all_tickets, get_alerts_for_booking,
-    get_alerts, mark_alerts_read,
-    get_job_completions, resolve_job_completion,
-    get_usage_stats, get_business_analytics,
+    get_alerts,
+    get_alerts_for_booking,
+    get_all_tickets,
+    get_business_analytics,
+    get_clients,
+    get_job_completions,
+    get_usage_stats,
+    mark_alerts_read,
     reset_operational_data,
-    get_clients, update_ticket_details,
-)
-from backend.qa_cache import get_pending as qa_get_pending, approve as qa_approve, reject as qa_reject
-from tools import (
-    approve_booking_tool, reject_booking_tool,
-    approve_survey_estimate_tool, reject_survey_estimate_tool,
-    _THANKYOU_EMAIL_TEMPLATE,
+    resolve_job_completion,
+    update_ticket_details,
 )
 from backend.email_utils import send_email
 from backend.llm_provider import get_llm
+from backend.qa_cache import approve as qa_approve
+from backend.qa_cache import get_pending as qa_get_pending
+from backend.qa_cache import reject as qa_reject
+from tools import (
+    _THANKYOU_EMAIL_TEMPLATE,
+    approve_booking_tool,
+    approve_survey_estimate_tool,
+    reject_booking_tool,
+    reject_survey_estimate_tool,
+)
 
 st.set_page_config(page_title="Manager Portal", page_icon=None, layout="wide")
 
@@ -72,13 +93,31 @@ with panel_col:
     with st.container(key="dashboard_zone", height="stretch"):
         render_ticket_summary(get_all_tickets())
 
-        tab_tickets, tab_map, tab_clients, tab_alerts, tab_qa, tab_analytics, tab_llm_usage = st.tabs(
-            [t("tab_tickets"), t("map_tab_label"), t("tab_clients"), t("tab_alerts"),
-             t("tab_qa"), t("tab_analytics"), t("tab_llm_usage")]
+        tab_tickets, tab_map, tab_clients, tab_alerts, tab_qa, tab_analytics, tab_llm_usage = (
+            st.tabs(
+                [
+                    t("tab_tickets"),
+                    t("map_tab_label"),
+                    t("tab_clients"),
+                    t("tab_alerts"),
+                    t("tab_qa"),
+                    t("tab_analytics"),
+                    t("tab_llm_usage"),
+                ]
+            )
         )
 
-        _STATUS_FILTER_OPTIONS = ["All", "new", "open", "in_progress", "awaiting_client",
-                                   "blocked", "in_review", "closed", "cancelled"]
+        _STATUS_FILTER_OPTIONS = [
+            "All",
+            "new",
+            "open",
+            "in_progress",
+            "awaiting_client",
+            "blocked",
+            "in_review",
+            "closed",
+            "cancelled",
+        ]
 
         # ── tickets ───────────────────────────────────────────────────────────────
         with tab_tickets:
@@ -109,23 +148,24 @@ with panel_col:
             # Collect all NEW ticket IDs for batch approval (survey requests only).
             new_tickets = [tk for tk in tickets if tk.get("ticket_status") == "new"]
             with batch_col:
-                if new_tickets:
-                    if st.button(t("approve_all_new").format(count=len(new_tickets)), use_container_width=True):
-                        approved, failed = 0, []
-                        for tk in new_tickets:
-                            if not st.session_state.get(f"sel_{tk['id']}", True):
-                                continue
-                            result = approve_booking_tool.invoke({"booking_id": tk["id"]})
-                            if "approved and added to calendar" in result:
-                                approved += 1
-                            else:
-                                failed.append(f"{ticket_code(tk['id'])}: {result}")
-                        if approved:
-                            st.success(t("approved_n_tickets").format(count=approved))
-                        for err in failed:
-                            st.error(err)
-                        if approved:
-                            st.rerun()
+                if new_tickets and st.button(
+                    t("approve_all_new").format(count=len(new_tickets)), use_container_width=True
+                ):
+                    approved, failed = 0, []
+                    for tk in new_tickets:
+                        if not st.session_state.get(f"sel_{tk['id']}", True):
+                            continue
+                        result = approve_booking_tool.invoke({"booking_id": tk["id"]})
+                        if "approved and added to calendar" in result:
+                            approved += 1
+                        else:
+                            failed.append(f"{ticket_code(tk['id'])}: {result}")
+                    if approved:
+                        st.success(t("approved_n_tickets").format(count=approved))
+                    for err in failed:
+                        st.error(err)
+                    if approved:
+                        st.rerun()
 
             # Pre-fetch pending job completions indexed by booking_id (installation phase).
             pending_jobs = {
@@ -135,18 +175,22 @@ with panel_col:
             }
 
             if not tickets:
-                st.info(t("no_tickets_yet") if status_filter == "All" else t("no_status_tickets").format(status=t(f"status_{status_filter}")))
+                st.info(
+                    t("no_tickets_yet")
+                    if status_filter == "All"
+                    else t("no_status_tickets").format(status=t(f"status_{status_filter}"))
+                )
             else:
                 table_rows = [
                     {
-                        "Code":    ticket_code(tk["id"]),
+                        "Code": ticket_code(tk["id"]),
                         "Product": tk["model"],
-                        "Qty":     tk.get("quantity", 1),
-                        "Client":  tk.get("client_name") or tk.get("requested_by", "—"),
-                        "Date":    tk["date_str"],
-                        "Time":    tk["time_str"],
-                        "Phase":   t(f"phase_{tk.get('ticket_phase', 'installation')}"),
-                        "Status":  t(f"status_{tk.get('ticket_status', 'new')}").upper(),
+                        "Qty": tk.get("quantity", 1),
+                        "Client": tk.get("client_name") or tk.get("requested_by", "—"),
+                        "Date": tk["date_str"],
+                        "Time": tk["time_str"],
+                        "Phase": t(f"phase_{tk.get('ticket_phase', 'installation')}"),
+                        "Status": t(f"status_{tk.get('ticket_status', 'new')}").upper(),
                     }
                     for tk in tickets
                 ]
@@ -173,7 +217,7 @@ with panel_col:
                     st.caption(t("select_ticket_hint"))
                 else:
                     ticket = tickets[selected_rows[0]]
-                    ts    = ticket.get("ticket_status", "new")
+                    ts = ticket.get("ticket_status", "new")
                     phase = ticket.get("ticket_phase", "installation")
                     tcode = ticket_code(ticket["id"])
                     email = ticket.get("client_email", "")
@@ -190,15 +234,25 @@ with panel_col:
 
                             col_a, col_r = st.columns(2)
                             with col_a:
-                                if st.button(t("approve_button"), key=f"t_approve_{ticket['id']}", use_container_width=True):
-                                    result = approve_booking_tool.invoke({"booking_id": ticket["id"]})
+                                if st.button(
+                                    t("approve_button"),
+                                    key=f"t_approve_{ticket['id']}",
+                                    use_container_width=True,
+                                ):
+                                    result = approve_booking_tool.invoke(
+                                        {"booking_id": ticket["id"]}
+                                    )
                                     if "approved and added to calendar" in result:
                                         st.success(result)
                                         st.rerun()
                                     else:
                                         st.error(result)
                             with col_r:
-                                if st.button(t("reject_button"), key=f"t_reject_{ticket['id']}", use_container_width=True):
+                                if st.button(
+                                    t("reject_button"),
+                                    key=f"t_reject_{ticket['id']}",
+                                    use_container_width=True,
+                                ):
                                     st.session_state[f"reject_open_{ticket['id']}"] = True
 
                             if st.session_state.get(f"reject_open_{ticket['id']}"):
@@ -208,11 +262,16 @@ with panel_col:
                                         placeholder=t("reason_rejection_placeholder"),
                                         key=f"reject_reason_{ticket['id']}",
                                     )
-                                    submitted = st.form_submit_button(t("confirm_rejection_button"), use_container_width=True)
+                                    submitted = st.form_submit_button(
+                                        t("confirm_rejection_button"), use_container_width=True
+                                    )
                                     if submitted:
                                         if reason.strip():
                                             result = reject_booking_tool.invoke(
-                                                {"booking_id": ticket["id"], "reason": reason.strip()}
+                                                {
+                                                    "booking_id": ticket["id"],
+                                                    "reason": reason.strip(),
+                                                }
                                             )
                                             st.warning(result)
                                             st.session_state[f"reject_open_{ticket['id']}"] = False
@@ -236,20 +295,34 @@ with panel_col:
                                     f"**{t('glass_type_caption')}** {ticket.get('glass_type')}"
                                 )
                                 if ticket.get("survey_notes"):
-                                    st.caption(t("notes_inline").format(notes=ticket["survey_notes"]))
+                                    st.caption(
+                                        t("notes_inline").format(notes=ticket["survey_notes"])
+                                    )
 
                             col_a, col_r = st.columns(2)
                             with col_a:
-                                if st.button(t("approve_and_price"), key=f"sr_approve_{ticket['id']}", use_container_width=True):
-                                    result = approve_survey_estimate_tool.invoke({"booking_id": ticket["id"]})
+                                if st.button(
+                                    t("approve_and_price"),
+                                    key=f"sr_approve_{ticket['id']}",
+                                    use_container_width=True,
+                                ):
+                                    result = approve_survey_estimate_tool.invoke(
+                                        {"booking_id": ticket["id"]}
+                                    )
                                     if "computed and saved" in result:
                                         st.success(result)
                                     else:
                                         st.error(result)
                                     st.rerun()
                             with col_r:
-                                if st.button(t("reject_button"), key=f"sr_reject_{ticket['id']}", use_container_width=True):
-                                    result = reject_survey_estimate_tool.invoke({"booking_id": ticket["id"]})
+                                if st.button(
+                                    t("reject_button"),
+                                    key=f"sr_reject_{ticket['id']}",
+                                    use_container_width=True,
+                                ):
+                                    result = reject_survey_estimate_tool.invoke(
+                                        {"booking_id": ticket["id"]}
+                                    )
                                     st.warning(result)
                                     st.rerun()
 
@@ -271,7 +344,11 @@ with panel_col:
 
                                 col_a, col_r = st.columns(2)
                                 with col_a:
-                                    if st.button(t("approve_and_email"), key=f"jr_approve_{job['id']}", use_container_width=True):
+                                    if st.button(
+                                        t("approve_and_email"),
+                                        key=f"jr_approve_{job['id']}",
+                                        use_container_width=True,
+                                    ):
                                         username = st.session_state.get("username", "manager")
                                         resolve_job_completion(job["id"], "approved", username)
                                         if client_email_val and "@" in client_email_val:
@@ -287,8 +364,14 @@ with panel_col:
                                                     subject="Thank You — Your Installation is Complete",
                                                     body=body,
                                                 )
-                                                email_status = t("email_status_sent") if sent else t("email_status_failed")
-                                                msg = t("email_sent_msg").format(status=email_status, email=client_email_val)
+                                                email_status = (
+                                                    t("email_status_sent")
+                                                    if sent
+                                                    else t("email_status_failed")
+                                                )
+                                                msg = t("email_sent_msg").format(
+                                                    status=email_status, email=client_email_val
+                                                )
                                             except Exception as exc:
                                                 msg = t("email_error_msg").format(error=exc)
                                         else:
@@ -296,30 +379,58 @@ with panel_col:
                                         st.success(msg)
                                         st.rerun()
                                 with col_r:
-                                    if st.button(t("reject_button"), key=f"jr_reject_{job['id']}", use_container_width=True):
+                                    if st.button(
+                                        t("reject_button"),
+                                        key=f"jr_reject_{job['id']}",
+                                        use_container_width=True,
+                                    ):
                                         username = st.session_state.get("username", "manager")
                                         resolve_job_completion(job["id"], "rejected", username)
                                         st.warning(t("report_rejected_msg"))
                                         st.rerun()
 
                         elif ts == "awaiting_client":
-                            st.caption(t("estimate_sent_caption").format(price=f"{ticket.get('estimated_price', 0):.2f}"))
+                            st.caption(
+                                t("estimate_sent_caption").format(
+                                    price=f"{ticket.get('estimated_price', 0):.2f}"
+                                )
+                            )
 
                         # ── edit ticket details (e.g. after a call with the client) ──
                         with st.expander(t("edit_ticket_expander")):
                             with st.form(key=f"edit_form_{ticket['id']}"):
-                                e_name = st.text_input(t("client_name_label"), value=ticket.get("client_name", ""))
-                                e_email = st.text_input(t("client_email_label"), value=ticket.get("client_email", ""))
-                                e_phone = st.text_input(t("client_phone_label"), value=ticket.get("client_phone", ""))
-                                e_address = st.text_input(t("client_address_label"), value=ticket.get("client_address", ""))
-                                col_d, col_t, col_q = st.columns(3)
-                                e_date = col_d.text_input(t("booking_form_date"), value=ticket.get("date_str", ""))
-                                e_time = col_t.text_input(t("booking_form_time"), value=ticket.get("time_str", ""))
-                                e_qty = col_q.number_input(
-                                    t("booking_form_quantity"), min_value=1, step=1, value=int(ticket.get("quantity", 1))
+                                e_name = st.text_input(
+                                    t("client_name_label"), value=ticket.get("client_name", "")
                                 )
-                                e_notes = st.text_area(t("notes_field_label"), value=ticket.get("notes", ""))
-                                save = st.form_submit_button(t("save_changes_button"), use_container_width=True)
+                                e_email = st.text_input(
+                                    t("client_email_label"), value=ticket.get("client_email", "")
+                                )
+                                e_phone = st.text_input(
+                                    t("client_phone_label"), value=ticket.get("client_phone", "")
+                                )
+                                e_address = st.text_input(
+                                    t("client_address_label"),
+                                    value=ticket.get("client_address", ""),
+                                )
+                                col_d, col_t, col_q = st.columns(3)
+                                e_date = col_d.text_input(
+                                    t("booking_form_date"), value=ticket.get("date_str", "")
+                                )
+                                e_time = col_t.text_input(
+                                    t("booking_form_time"), value=ticket.get("time_str", "")
+                                )
+                                e_qty = col_q.number_input(
+                                    t("booking_form_quantity"),
+                                    min_value=1,
+                                    step=1,
+                                    value=int(ticket.get("quantity", 1)),
+                                )
+                                e_notes = st.text_area(
+                                    t("notes_field_label"), value=ticket.get("notes", "")
+                                )
+                                save = st.form_submit_button(
+                                    t("save_changes_button"), use_container_width=True
+                                )
 
                                 if save:
                                     try:
@@ -330,14 +441,23 @@ with panel_col:
                                     else:
                                         username = st.session_state.get("username", "manager")
                                         updated = update_ticket_details(
-                                            ticket["id"], username,
-                                            client_name=e_name, client_email=e_email,
-                                            client_phone=e_phone, client_address=e_address,
-                                            date_str=e_date, time_str=e_time,
-                                            quantity=int(e_qty), notes=e_notes,
+                                            ticket["id"],
+                                            username,
+                                            client_name=e_name,
+                                            client_email=e_email,
+                                            client_phone=e_phone,
+                                            client_address=e_address,
+                                            date_str=e_date,
+                                            time_str=e_time,
+                                            quantity=int(e_qty),
+                                            notes=e_notes,
                                         )
                                         if updated:
-                                            st.success(t("ticket_updated_msg").format(code=ticket_code(ticket['id'])))
+                                            st.success(
+                                                t("ticket_updated_msg").format(
+                                                    code=ticket_code(ticket["id"])
+                                                )
+                                            )
                                             st.rerun()
                                         else:
                                             st.error(t("could_not_update_ticket"))
@@ -348,7 +468,12 @@ with panel_col:
 
         # ── clients ───────────────────────────────────────────────────────────────
         with tab_clients:
-            search = st.text_input(t("search_label"), key="clients_search", placeholder=t("search_by_name_placeholder"), label_visibility="collapsed")
+            search = st.text_input(
+                t("search_label"),
+                key="clients_search",
+                placeholder=t("search_by_name_placeholder"),
+                label_visibility="collapsed",
+            )
             clients = sorted(get_clients(), key=lambda c: c["full_name"].lower())
             if search.strip():
                 clients = [c for c in clients if search.strip().lower() in c["full_name"].lower()]
@@ -363,12 +488,12 @@ with panel_col:
                             st.caption(t("phone_label_inline").format(phone=c["phone"]))
                         if c.get("address"):
                             st.caption(t("address_inline").format(address=c["address"]))
-                        st.caption(t("client_since_label").format(date=c['created_at'][:10]))
+                        st.caption(t("client_since_label").format(date=c["created_at"][:10]))
 
         # ── alerts ────────────────────────────────────────────────────────────────
         with tab_alerts:
             unread_alerts = get_alerts(unread_only=True)
-            all_alerts    = get_alerts(unread_only=False)
+            all_alerts = get_alerts(unread_only=False)
 
             if not all_alerts:
                 st.info(t("no_alerts_yet"))
@@ -405,51 +530,84 @@ with panel_col:
             else:
                 for item in qa_pending:
                     with st.container(border=True):
-                        st.markdown(f"**{t('qa_question_label').format(role=item['source_role'])}** {item['question']}")
-                        st.caption(t("submitted_label").format(date=item['created_at'][:10]))
+                        st.markdown(
+                            f"**{t('qa_question_label').format(role=item['source_role'])}** {item['question']}"
+                        )
+                        st.caption(t("submitted_label").format(date=item["created_at"][:10]))
                         with st.expander(t("view_answer_expander")):
                             st.markdown(item["answer"])
                         col_add, col_skip, _ = st.columns([2, 2, 4])
                         with col_add:
-                            if st.button(t("add_to_cache_button"), key=f"qa_approve_{item['id']}", use_container_width=True):
+                            if st.button(
+                                t("add_to_cache_button"),
+                                key=f"qa_approve_{item['id']}",
+                                use_container_width=True,
+                            ):
                                 username = st.session_state.get("username", "manager")
                                 result = qa_approve(item["id"], approved_by=username)
                                 st.success(t("added_msg") if result else t("skipped_duplicate_msg"))
                                 st.rerun()
                         with col_skip:
-                            if st.button(t("skip_button"), key=f"qa_reject_{item['id']}", use_container_width=True):
+                            if st.button(
+                                t("skip_button"),
+                                key=f"qa_reject_{item['id']}",
+                                use_container_width=True,
+                            ):
                                 qa_reject(item["id"])
                                 st.rerun()
 
-        _period_format = lambda p: {"day": t("period_day"), "week": t("period_week"), "month": t("period_month")}[p]
+        def _period_format(p):
+            return {"day": t("period_day"), "week": t("period_week"), "month": t("period_month")}[p]
 
         # ── business analytics (tickets/revenue/hours) ──────────────────────────────
         with tab_analytics:
-            biz_period = st.radio(t("period_label"), ["day", "week", "month"], format_func=_period_format, horizontal=True, key="biz_period")
+            biz_period = st.radio(
+                t("period_label"),
+                ["day", "week", "month"],
+                format_func=_period_format,
+                horizontal=True,
+                key="biz_period",
+            )
             biz = get_business_analytics(biz_period)
-            render_stat_tiles([
-                {"label": t("closed_tickets_label"), "value": f"{biz['closed_count']:,}"},
-                {"label": t("total_revenue_label"),  "value": f"€{biz['total_revenue']:.2f}"},
-                {"label": t("hours_worked_label"),   "value": f"{biz['total_hours']:.1f}"},
-            ])
+            render_stat_tiles(
+                [
+                    {"label": t("closed_tickets_label"), "value": f"{biz['closed_count']:,}"},
+                    {"label": t("total_revenue_label"), "value": f"€{biz['total_revenue']:.2f}"},
+                    {"label": t("hours_worked_label"), "value": f"{biz['total_hours']:.1f}"},
+                ]
+            )
             # by_day is always fully populated (one entry per day in the window,
             # zero-filled) so the chart shows a consistent 1/7/30-day axis.
             chart_df = pd.DataFrame(
-                [{"Date": day, t("total_revenue_label"): v["revenue"]} for day, v in biz["by_day"].items()]
+                [
+                    {"Date": day, t("total_revenue_label"): v["revenue"]}
+                    for day, v in biz["by_day"].items()
+                ]
             ).set_index("Date")
             st.bar_chart(chart_df)
 
         # ── LLM usage analytics ──────────────────────────────────────────────────
         with tab_llm_usage:
-            period  = st.radio(t("period_label"), ["day", "week", "month"], format_func=_period_format, horizontal=True, key="usage_period")
-            stats   = get_usage_stats(period)
-            totals  = stats["totals"]
+            period = st.radio(
+                t("period_label"),
+                ["day", "week", "month"],
+                format_func=_period_format,
+                horizontal=True,
+                key="usage_period",
+            )
+            stats = get_usage_stats(period)
+            totals = stats["totals"]
             by_role = stats["by_role"]
-            render_stat_tiles([
-                {"label": t("cost_label"),     "value": f"${totals['cost_usd']:.4f}"},
-                {"label": t("requests_label"), "value": f"{totals['requests']:,}"},
-                {"label": t("tokens_label"),   "value": f"{totals['input_tokens'] + totals['output_tokens']:,}"},
-            ])
+            render_stat_tiles(
+                [
+                    {"label": t("cost_label"), "value": f"${totals['cost_usd']:.4f}"},
+                    {"label": t("requests_label"), "value": f"{totals['requests']:,}"},
+                    {
+                        "label": t("tokens_label"),
+                        "value": f"{totals['input_tokens'] + totals['output_tokens']:,}",
+                    },
+                ]
+            )
             if by_role:
                 for r, data in by_role.items():
                     st.caption(
@@ -467,20 +625,20 @@ with panel_col:
 # ═══════════════════════════════════════════════════════════════════════════════
 # LEFT PANEL — CHAT
 # ═══════════════════════════════════════════════════════════════════════════════
-with chat_col:
-    with st.container(key="chat_zone", height="stretch"):
-        st.subheader(t("assistant_label"))
-        selected_model = render_sidebar("manager")
-        agent = get_agent(selected_model, "manager")
+with chat_col, st.container(key="chat_zone", height="stretch"):
+    st.subheader(t("assistant_label"))
+    selected_model = render_sidebar("manager")
+    agent = get_agent(selected_model, "manager")
 
-        render_chat_history(agent)
+    render_chat_history(agent)
 
-        user_prompt = render_hitl_and_input(
-            agent, selected_model,
-            prompt_hint=t("manager_sub"),
-        )
+    user_prompt = render_hitl_and_input(
+        agent,
+        selected_model,
+        prompt_hint=t("manager_sub"),
+    )
 
-        if user_prompt:
-            handle_user_turn(user_prompt, agent, selected_model)
+    if user_prompt:
+        handle_user_turn(user_prompt, agent, selected_model)
 
-        render_chat_autoscroll()
+    render_chat_autoscroll()

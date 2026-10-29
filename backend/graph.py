@@ -14,15 +14,15 @@ execute immediately without interruption.
 """
 
 import logging
-from typing import Annotated, Callable, Literal, Optional, Union
+from collections.abc import Callable, Mapping
+from typing import Annotated, Any, Literal
 
-from typing_extensions import TypedDict
-
-from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
-from langgraph.graph import StateGraph, START, END
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
+from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
-from langgraph.types import interrupt, Command
+from langgraph.types import Command, interrupt
+from typing_extensions import TypedDict
 
 from backend.database import ticket_code
 
@@ -36,21 +36,23 @@ _DEFAULT_MUTATING_TOOL_NAMES = {"book_installation_tool", "request_site_survey_t
 
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
-    pending_tool_call: Optional[dict]   # tool call waiting for HITL confirmation
+    pending_tool_call: dict | None  # tool call waiting for HITL confirmation
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+
 def _make_is_mutating(mutating_tool_names: set[str]):
-    def _is_mutating(tool_call: dict) -> bool:
+    def _is_mutating(tool_call: Mapping[str, Any]) -> bool:
         name = tool_call.get("name", "")
         if name == "inventory_api_tool":
             return tool_call.get("args", {}).get("action") in _MUTATING_INVENTORY_ACTIONS
         return name in mutating_tool_names
+
     return _is_mutating
 
 
-def _confirmation_summary(tc: dict) -> str:
+def _confirmation_summary(tc: Mapping[str, Any]) -> str:
     name = tc["name"]
     args = tc.get("args", {})
     if name == "book_installation_tool":
@@ -90,7 +92,9 @@ def _confirmation_summary(tc: dict) -> str:
         return f"Update cost variable **{args.get('key')}** to **{args.get('value')}**?"
     if name == "complete_job_tool":
         ref = f" (booking #{args.get('booking_id')})" if args.get("booking_id") else ""
-        email_note = f" — client email: {args.get('client_email')}" if args.get("client_email") else ""
+        email_note = (
+            f" — client email: {args.get('client_email')}" if args.get("client_email") else ""
+        )
         return f"Submit job completion report{ref}{email_note}?\n\n> {args.get('notes', '')}"
     if name == "send_estimate_to_client_tool":
         return f"Send price estimate to **{args.get('client_email')}**?"
@@ -100,19 +104,20 @@ def _confirmation_summary(tc: dict) -> str:
     if name == "claim_installation_tool":
         return f"Start working on installation **{ticket_code(args.get('booking_id'))}** and mark it as in progress?"
     if name == "approve_booking_tool":
-        return f"Approve booking **{ticket_code(args.get('booking_id'))}** and add it to the calendar?"
+        return (
+            f"Approve booking **{ticket_code(args.get('booking_id'))}** and add it to the calendar?"
+        )
     if name == "reject_booking_tool":
         return f"Reject booking **{ticket_code(args.get('booking_id'))}**? This cannot be undone."
     if name == "approve_job_tool":
-        email_note = f" — thank-you email to **{args['client_email']}**" if args.get("client_email") else ""
+        email_note = (
+            f" — thank-you email to **{args['client_email']}**" if args.get("client_email") else ""
+        )
         return f"Approve job completion report **#{args.get('job_id')}**{email_note}?"
     if name == "reject_job_tool":
         return f"Reject job completion report **#{args.get('job_id')}**? This cannot be undone."
     if name == "edit_ticket_tool":
-        changed = {
-            k: v for k, v in args.items()
-            if k != "ticket_reference" and v is not None
-        }
+        changed = {k: v for k, v in args.items() if k != "ticket_reference" and v is not None}
         field_list = ", ".join(f"**{k}** → {v}" for k, v in changed.items())
         return f"Update {args.get('ticket_reference')}: {field_list}?"
     return f"Execute **{name}** with args `{args}`?"
@@ -120,10 +125,11 @@ def _confirmation_summary(tc: dict) -> str:
 
 # ── graph factory ─────────────────────────────────────────────────────────────
 
+
 def build_graph(
     llm,
     tools: list,
-    system_prompt: Union[str, Callable[[], str]],
+    system_prompt: str | Callable[[], str],
     checkpointer=None,
     mutating_tool_names: set | None = None,
 ):
@@ -182,14 +188,19 @@ def build_graph(
                         ToolMessage and loops back to agent for a natural reply
         """
         last = state["messages"][-1]
+        # Routed here only after the agent emitted a mutating tool call.
+        if not isinstance(last, AIMessage):
+            raise TypeError(f"confirm_node expects an AIMessage, got {type(last).__name__}")
         mutating_tc = next(tc for tc in last.tool_calls if _is_mutating(tc))
 
-        decision = interrupt({
-            "tool": mutating_tc["name"],
-            "args": mutating_tc["args"],
-            "summary": _confirmation_summary(mutating_tc),
-            "tool_call_id": mutating_tc["id"],
-        })
+        decision = interrupt(
+            {
+                "tool": mutating_tc["name"],
+                "args": mutating_tc["args"],
+                "summary": _confirmation_summary(mutating_tc),
+                "tool_call_id": mutating_tc["id"],
+            }
+        )
 
         if decision == "confirmed":
             return Command(
@@ -211,6 +222,8 @@ def build_graph(
 
     def execute_confirmed_node(state: AgentState) -> dict:
         tc = state["pending_tool_call"]
+        if tc is None:
+            raise RuntimeError("execute_confirmed reached without a pending tool call")
         tool = tools_by_name[tc["name"]]
         try:
             result = tool.invoke(tc["args"])
