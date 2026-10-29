@@ -34,12 +34,11 @@ from backend.database import (
     get_inventory,
     get_product,
     get_ticket_log,
-    log_usage,
     set_config,
     ticket_code,
 )
-from backend.llm_provider import DEFAULT_MODEL, OPENROUTER_MODELS, calculate_cost
-from backend.log_context import username_var, verified_client_email_var
+from backend.llm_provider import DEFAULT_MODEL, OPENROUTER_MODELS
+from backend.log_context import role_var, username_var, verified_client_email_var
 from backend.qa_cache import lookup as _cache_lookup
 from backend.qa_cache import submit_for_review as qa_submit
 
@@ -2657,11 +2656,13 @@ def require_auth(allowed_roles: list[str] = None):
 def bind_request_context() -> None:
     """
     Copies this session's identity into the ContextVars tools read
-    (username_var, verified_client_email_var). Called on every page run via
-    require_auth(), so direct tool calls from dashboard buttons get the right
-    identity too — not only agent turns.
+    (username_var, verified_client_email_var) and usage accounting reads
+    (role_var). Called on every page run via require_auth(), so direct tool
+    and LLM calls from dashboard buttons get the right identity too — not
+    only agent turns.
     """
     username_var.set(st.session_state.get("username", "unknown"))
+    role_var.set(st.session_state.get("role"))
     verified_client_email_var.set(st.session_state.get("verified_client_email", ""))
 
 
@@ -3344,7 +3345,7 @@ def _stream_resume(agent, decision: str, selected_model: str):
     result = TurnResult()
     with st.chat_message("assistant", avatar=_chat_avatar("assistant")):
         raw_text = st.write_stream(agent.stream_resume(decision, _get("thread_id"), result))
-        _save_assistant_turn(result, raw_text, selected_model)
+        _save_assistant_turn(result, raw_text)
     st.rerun()
 
 
@@ -3448,7 +3449,7 @@ def handle_user_turn(user_prompt: str, agent, selected_model: str, is_synthetic:
     result = TurnResult()
     with st.chat_message("assistant", avatar=_chat_avatar("assistant")):
         raw_text = st.write_stream(agent.stream_ask(user_prompt, _get("thread_id"), result))
-        _save_assistant_turn(result, raw_text, selected_model, user_question=user_prompt)
+        _save_assistant_turn(result, raw_text, user_question=user_prompt)
 
     st.rerun()
 
@@ -3494,29 +3495,15 @@ def _render_answer_metadata(message: dict):
 # ── save assistant turn ───────────────────────────────────────────────────────
 
 
-def _save_assistant_turn(
-    result: TurnResult, raw_text: str, selected_model: str, user_question: str = ""
-):
+def _save_assistant_turn(result: TurnResult, raw_text: str, user_question: str = ""):
     captured_tools = result.tool_calls
-    usage = result.usage
     run_id = result.run_id
     _set("pending_interrupt", result.interrupt)
 
-    cost = calculate_cost(
-        selected_model, usage.get("input_tokens", 0), usage.get("output_tokens", 0)
-    )
-    _set("total_cost", _get("total_cost", 0.0) + cost)
-    _set("last_query_cost", cost)
-    _set("total_tokens", _get("total_tokens", 0) + usage.get("total_tokens", 0))
-
-    with contextlib.suppress(Exception):
-        log_usage(
-            role=st.session_state.get("role", "unknown"),
-            model=selected_model,
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
-            cost_usd=cost,
-        )
+    # The agent already logged the turn to usage_log; this is the session's running total.
+    _set("total_cost", _get("total_cost", 0.0) + result.cost_usd)
+    _set("last_query_cost", result.cost_usd)
+    _set("total_tokens", _get("total_tokens", 0) + result.usage["total_tokens"])
 
     is_general_llm = any(tc.get("tool") == "general_door_knowledge_tool" for tc in captured_tools)
     is_cache_hit = any("CACHE_HIT" in str(tc.get("output", "")) for tc in captured_tools)

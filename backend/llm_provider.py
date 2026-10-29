@@ -91,6 +91,9 @@ def get_llm(
     from langchain_openai import ChatOpenAI
     from pydantic import SecretStr
 
+    # Imported here: usage_tracking imports this module for the price table.
+    from backend.usage_tracking import USAGE_RECORDER
+
     # Use default if not specified
     if model_name is None:
         model_name = DEFAULT_MODEL
@@ -112,6 +115,10 @@ def get_llm(
         api_key=SecretStr(OPENROUTER_API_KEY),
         base_url="https://openrouter.ai/api/v1",
         streaming=streaming,
+        # Real token counts in streamed responses too: langchain-openai only
+        # turns this on by itself for OpenAI's own base_url.
+        stream_usage=True,
+        callbacks=[USAGE_RECORDER, *kwargs.pop("callbacks", [])],
         **kwargs,
     )
 

@@ -94,7 +94,8 @@ reason to keep `CONVERSATION_RETENTION_DAYS` no longer than necessary.
 - **Google Calendar integration** — OAuth2-based availability check and installation/survey booking; past/invalid dates and times are rejected with a clear warning instead of silently failing.
 - **Voice mode** — speech-to-text (OpenAI Whisper) and text-to-speech (OpenAI TTS) for chat input/output.
 - **Multi-language UI** — English, Italiano, Deutsch, Español, Slovenščina (chat replies always match the user's own message language, independent of the UI language setting).
-- **Two analytics views for the manager**: **LLM Usage** (per-role token/cost tracking) and **Analytics** (business metrics — closed tickets, total revenue, hours worked; the chart is always a full, zero-filled 7-day or 30-day rolling window plotting daily revenue, never a sparse list of only the days that happened to close a ticket).
+- **Two analytics views for the manager**: **LLM Usage** (per-role token/cost tracking, see the next point) and **Analytics** (business metrics — closed tickets, total revenue, hours worked; the chart is always a full, zero-filled 7-day or 30-day rolling window plotting daily revenue, never a sparse list of only the days that happened to close a ticket).
+- **Token & cost accounting** — token counts are the ones the provider reports for each call (`usage_metadata`, requested in streamed responses too), not estimates. Every LLM call is counted: the agent's own, the input safety guard, calls made inside tools (query expansion, RAG, form extraction, emails) and calls made directly by dashboard buttons. Each call is priced at the model that actually served it (tools use the default model, whatever model the chat uses), from the price table in `backend/llm_provider.py` — keep it in line with OpenRouter's prices; cached-input discounts are not modelled. A chat turn is logged to `usage_log` as one row per model used, a dashboard-button call as one row. Offline scripts (ingestion, evaluation) are not logged. If a provider ever reports no usage, an approximate count is logged instead, with a `USAGE_ESTIMATED` warning.
 - **In-app PDF catalogue viewer**.
 - **Layout**: a fixed header and chat input, two independently scrollable panes (chat vs. dashboard), and a draggable handle between them to resize the split by hand.
 
@@ -120,6 +121,7 @@ backend/
   database.py             SQLite schema, inventory seeding, tickets/bookings/alerts/audit log/analytics
   company_config.py       Company-specific naming/branding, env-overridable
   llm_provider.py         OpenRouter model registry + cost calculation
+  usage_tracking.py       Per-call token/cost accounting from provider-reported usage
   qa_cache.py             Semantic Q&A cache (Chroma-backed)
   email_utils.py          SMTP notifications
   voice.py                Whisper STT / OpenAI TTS
