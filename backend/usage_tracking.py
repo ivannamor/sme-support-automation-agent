@@ -6,6 +6,11 @@ seen — the agent's own, the safety guard's, those made inside tools and those
 made directly by dashboard buttons. Each call is priced at the model that
 actually served it (tools use the default model, whatever the chat uses).
 
+Cost: the exact amount OpenRouter reports for the call when there is one —
+only on non-streamed calls, since langchain-openai drops it from streamed
+usage — otherwise tokens × the price table in llm_provider. When both exist
+and disagree, PRICE_TABLE_STALE is logged: the table needs updating.
+
 Where the usage goes:
   - inside track_usage() (one chat turn): added to that turn's UsageTracker,
     written to usage_log as one row per model when the turn ends;
@@ -34,18 +39,47 @@ logger = logging.getLogger("UsageTracking")
 
 UNKNOWN_MODEL = "unknown"
 
+# How far the price table may drift from OpenRouter's reported cost.
+PRICE_TABLE_TOLERANCE = 0.05
+
 
 @dataclass
 class ModelUsage:
     input_tokens: int = 0
     output_tokens: int = 0
+    cost_usd: float = 0.0
 
 
-def _cost(model: str, usage: ModelUsage) -> float:
-    if model not in OPENROUTER_MODELS:
-        logger.warning(f"USAGE_UNPRICED: no price for model {model!r}, counted as $0")
-        return 0.0
-    return calculate_cost(model, usage.input_tokens, usage.output_tokens)
+def _provider_cost(response: Any, messages: list) -> float | None:
+    """The cost OpenRouter reports for the call, or None (streamed call, other provider)."""
+    reports = [(response.llm_output or {}).get("token_usage")]
+    reports += [m.response_metadata.get("token_usage") for m in messages]
+    for report in reports:
+        # With a user's own provider key (BYOK) the cost is only OpenRouter's fee.
+        if report and report.get("cost") is not None and not report.get("is_byok"):
+            return float(report["cost"])
+    return None
+
+
+def _call_cost(
+    model: str, input_tokens: int, output_tokens: int, provider_cost: float | None
+) -> float:
+    table_cost = (
+        calculate_cost(model, input_tokens, output_tokens) if model in OPENROUTER_MODELS else None
+    )
+    if provider_cost is None:
+        if table_cost is None:
+            logger.warning(f"USAGE_UNPRICED: no price for model {model!r}, counted as $0")
+            return 0.0
+        return table_cost
+    if table_cost is not None and abs(table_cost - provider_cost) > (
+        PRICE_TABLE_TOLERANCE * provider_cost
+    ):
+        logger.warning(
+            f"PRICE_TABLE_STALE: {model} cost ${provider_cost:.8f} per OpenRouter, "
+            f"${table_cost:.8f} per the price table in llm_provider.py"
+        )
+    return provider_cost
 
 
 def _log_rows(role: str, by_model: dict[str, ModelUsage]) -> None:
@@ -55,7 +89,7 @@ def _log_rows(role: str, by_model: dict[str, ModelUsage]) -> None:
             model=model,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
-            cost_usd=_cost(model, usage),
+            cost_usd=usage.cost_usd,
         )
 
 
@@ -67,11 +101,12 @@ class UsageTracker:
         # Tools may run in worker threads.
         self._lock = threading.Lock()
 
-    def add(self, model: str, input_tokens: int, output_tokens: int) -> None:
+    def add(self, model: str, call: ModelUsage) -> None:
         with self._lock:
             usage = self.by_model.setdefault(model, ModelUsage())
-            usage.input_tokens += input_tokens
-            usage.output_tokens += output_tokens
+            usage.input_tokens += call.input_tokens
+            usage.output_tokens += call.output_tokens
+            usage.cost_usd += call.cost_usd
 
     def totals(self) -> dict[str, int]:
         input_tokens = sum(u.input_tokens for u in self.by_model.values())
@@ -83,7 +118,7 @@ class UsageTracker:
         }
 
     def cost_usd(self) -> float:
-        return sum(_cost(model, usage) for model, usage in self.by_model.items())
+        return sum(usage.cost_usd for usage in self.by_model.values())
 
 
 _current_tracker: ContextVar[UsageTracker | None] = ContextVar("usage_tracker", default=None)
@@ -150,16 +185,21 @@ class UsageRecorder(BaseCallbackHandler):
         else:
             logger.warning(f"USAGE_ESTIMATED: {model} reported no token usage")
             input_tokens, output_tokens = input_estimate, count_tokens_approximately(messages)
+        call = ModelUsage(
+            input_tokens,
+            output_tokens,
+            _call_cost(model, input_tokens, output_tokens, _provider_cost(response, messages)),
+        )
 
         tracker = _current_tracker.get()
         if tracker is not None:
-            tracker.add(model, input_tokens, output_tokens)
+            tracker.add(model, call)
             return
         role = role_var.get()
         if role is None:
             return
         try:
-            _log_rows(role, {model: ModelUsage(input_tokens, output_tokens)})
+            _log_rows(role, {model: call})
         except Exception as exc:
             logger.error(f"USAGE_LOG_FAILED: {exc}")
 

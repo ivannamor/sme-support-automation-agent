@@ -79,3 +79,18 @@ def test_submit_for_review_skips_when_already_cached(isolated_qa_cache):
     )
     assert added is False
     assert qa_cache.get_pending() == []
+
+
+def test_similarity_is_the_true_cosine(isolated_qa_cache):
+    """The collection stores squared-L2 distances; _closest must turn them into cosine."""
+    qa_cache.submit_for_review("What is IRIS?", "IRIS is a window model.", source_role="client")
+    qa_cache.approve(qa_cache.get_pending()[0]["id"])
+    embeddings = FakeEmbeddings()
+    a = embeddings.embed_query("What is IRIS?")
+    b = embeddings.embed_query("How do I clean IRIS?")
+    cosine = sum(x * y for x, y in zip(a, b, strict=True))
+
+    match = qa_cache._closest("How do I clean IRIS?")
+
+    assert match is not None
+    assert match[1] == pytest.approx(cosine, abs=1e-5)

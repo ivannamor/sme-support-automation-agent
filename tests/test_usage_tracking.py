@@ -5,12 +5,10 @@ tools included) is counted, and each call is priced at its own model. A fake
 chat model reports fixed usage; no API calls are made.
 """
 
-import json
+import logging
 
 import pytest
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, AIMessageChunk
-from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 
 import backend.assistant as assistant
@@ -19,63 +17,12 @@ from backend.database import get_connection
 from backend.llm_provider import calculate_cost, get_llm
 from backend.log_context import role_var
 from backend.usage_tracking import USAGE_RECORDER, track_usage
+from tests.conftest import UsageFakeChatModel, fake_llm_with_usage
 
 GPT_4O = "openai/gpt-4o"
 MINI = "openai/gpt-4o-mini"
 
-
-class UsageFakeChatModel(BaseChatModel):
-    """
-    Replays `replies` (then "ok") and reports `usage` for every call, the way
-    ChatOpenAI does: on the message when invoked, on a final empty chunk when
-    streamed. `model` is what the recorder reads from the invocation params.
-    """
-
-    model: str = MINI
-    replies: list[AIMessage] = []
-    usage: dict | None = None
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    @property
-    def _identifying_params(self) -> dict:
-        return {"model": self.model}
-
-    def _next_reply(self) -> AIMessage:
-        return self.replies.pop(0) if self.replies else AIMessage(content="ok")
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
-        reply = self._next_reply()
-        if self.usage:
-            reply = reply.model_copy(update={"usage_metadata": self.usage})
-        return ChatResult(generations=[ChatGeneration(message=reply)])
-
-    def _stream(self, messages, stop=None, run_manager=None, **kwargs):
-        reply = self._next_reply()
-        tool_call_chunks = [
-            {"name": tc["name"], "args": json.dumps(tc["args"]), "id": tc["id"], "index": i}
-            for i, tc in enumerate(reply.tool_calls)
-        ]
-        yield ChatGenerationChunk(
-            message=AIMessageChunk(content=reply.content, tool_call_chunks=tool_call_chunks)
-        )
-        if self.usage:
-            yield ChatGenerationChunk(message=AIMessageChunk(content="", usage_metadata=self.usage))
-
-    @property
-    def _llm_type(self) -> str:
-        return "usage-fake-chat-model"
-
-
-def _fake(model: str, input_tokens: int, output_tokens: int, **kwargs) -> UsageFakeChatModel:
-    usage = {
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "total_tokens": input_tokens + output_tokens,
-    }
-    # The recorder attached like get_llm() does.
-    return UsageFakeChatModel(model=model, usage=usage, callbacks=[USAGE_RECORDER], **kwargs)
+_fake = fake_llm_with_usage
 
 
 def _usage_rows() -> list[tuple]:
@@ -118,6 +65,40 @@ def test_tracker_reads_provider_counts(test_db, streamed):
     assert _usage_rows() == [
         ("manager", MINI, 120, 30, pytest.approx(calculate_cost(MINI, 120, 30)))
     ]
+
+
+def _report(cost: float, is_byok: bool = False) -> dict:
+    return {"prompt_tokens": 120, "completion_tokens": 30, "cost": cost, "is_byok": is_byok}
+
+
+def test_provider_cost_is_used_when_reported(test_db, caplog):
+    table_cost = calculate_cost(MINI, 120, 30)
+    llm = _fake(MINI, 120, 30, provider_report=_report(table_cost * 1.02))
+    with caplog.at_level(logging.WARNING), track_usage("manager") as usage:
+        llm.invoke("hi")
+
+    assert usage.cost_usd() == pytest.approx(table_cost * 1.02)
+    assert _usage_rows()[0][4] == pytest.approx(table_cost * 1.02)
+    assert "PRICE_TABLE_STALE" not in caplog.text  # within the 5% tolerance
+
+
+def test_price_table_drift_is_logged(test_db, caplog):
+    table_cost = calculate_cost(MINI, 120, 30)
+    llm = _fake(MINI, 120, 30, provider_report=_report(table_cost * 2))
+    with caplog.at_level(logging.WARNING), track_usage("manager") as usage:
+        llm.invoke("hi")
+
+    assert usage.cost_usd() == pytest.approx(table_cost * 2)
+    assert "PRICE_TABLE_STALE" in caplog.text
+
+
+def test_byok_cost_is_ignored(test_db):
+    """With the user's own provider key, OpenRouter's cost is only its fee."""
+    llm = _fake(MINI, 120, 30, provider_report=_report(0.0000001, is_byok=True))
+    with track_usage("manager") as usage:
+        llm.invoke("hi")
+
+    assert usage.cost_usd() == pytest.approx(calculate_cost(MINI, 120, 30))
 
 
 def test_missing_usage_falls_back_to_an_estimate(test_db):

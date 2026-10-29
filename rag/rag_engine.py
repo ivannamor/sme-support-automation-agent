@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from functools import cache
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -10,9 +11,9 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import OpenAIEmbeddings
+from langchain_core.runnables.config import ContextThreadPoolExecutor
 
-from backend.company_config import COMPANY_CONTEXT
+from backend.company_config import COMPANY_CONTEXT, RAG_DB_DIRECTORY
 from backend.llm_provider import get_embeddings, get_llm
 
 load_dotenv()
@@ -24,7 +25,7 @@ logger = logging.getLogger("RAGEngine")
 # ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DB_DIRECTORY = str(PROJECT_ROOT / "db" / COMPANY_CONTEXT["rag_db_directory_name"])
+DB_DIRECTORY = str(RAG_DB_DIRECTORY)
 
 COLLECTIONS = {
     "catalogue": COMPANY_CONTEXT["catalogue_collection_name"],
@@ -441,15 +442,24 @@ def route_query_hybrid(query: str, allowed_collections: list[str] | None = None)
 # ============================================================
 
 
-def load_collection(collection_name: str, embeddings: OpenAIEmbeddings) -> Chroma:
+@cache
+def load_collection(collection_name: str) -> Chroma:
     """
-    Loads one Chroma collection from the shared vector DB directory.
+    Loads one Chroma collection from the shared vector DB directory — once
+    per process, not on every search.
     """
     return Chroma(
         persist_directory=DB_DIRECTORY,
-        embedding_function=embeddings,
+        embedding_function=get_embeddings(),
         collection_name=collection_name,
     )
+
+
+def _catalogue_filter(collection_name: str, product_name: str | None) -> str | None:
+    """The product to filter on: only in the catalogue, and only when exact matching is safe."""
+    if collection_name == COLLECTIONS["catalogue"] and should_apply_product_filter(product_name):
+        return product_name
+    return None
 
 
 # ============================================================
@@ -458,32 +468,31 @@ def load_collection(collection_name: str, embeddings: OpenAIEmbeddings) -> Chrom
 
 
 def retrieve_collection(
-    query: str,
+    query_vector: list[float],
     collection_name: str,
-    embeddings: OpenAIEmbeddings,
     k: int = 5,
     product_name: str | None = None,
 ) -> list[Document]:
     """
-    Vector retrieval from one Chroma collection.
+    Vector retrieval from one Chroma collection, by a query embedding the
+    caller computed once for all collections.
 
     Product filter is applied only to the catalogue collection and only when
     the detected product name is safe for exact metadata filtering.
     """
-    db = load_collection(collection_name, embeddings)
+    db = load_collection(collection_name)
 
-    should_filter_product = collection_name == COLLECTIONS[
-        "catalogue"
-    ] and should_apply_product_filter(product_name)
+    filter_product = _catalogue_filter(collection_name, product_name)
+    should_filter_product = filter_product is not None
 
-    if should_filter_product:
-        docs = db.similarity_search(
-            query,
+    if filter_product is not None:
+        docs = db.similarity_search_by_vector(
+            query_vector,
             k=k,
-            filter={"product_name": product_name},
+            filter={"product_name": filter_product},
         )
     else:
-        docs = db.similarity_search(query, k=k)
+        docs = db.similarity_search_by_vector(query_vector, k=k)
 
     for doc in docs:
         doc.metadata["collection"] = collection_name
@@ -502,7 +511,6 @@ def retrieve_collection(
 
 def get_bm25_retriever(
     collection_name: str,
-    embeddings: OpenAIEmbeddings,
     k: int = 5,
     product_name: str | None = None,
 ) -> BM25Retriever:
@@ -511,11 +519,9 @@ def get_bm25_retriever(
 
     Cache key includes product_name only when exact product filtering is safe.
     """
-    use_product_filter = collection_name == COLLECTIONS[
-        "catalogue"
-    ] and should_apply_product_filter(product_name)
+    filter_product = _catalogue_filter(collection_name, product_name)
 
-    cache_product_key = product_name if use_product_filter else "ALL"
+    cache_product_key = filter_product if filter_product is not None else "ALL"
     cache_key = f"{collection_name}::{cache_product_key}"
 
     if cache_key in BM25_CACHE:
@@ -523,17 +529,17 @@ def get_bm25_retriever(
         retriever.k = k
         return retriever
 
-    db = load_collection(collection_name, embeddings)
+    db = load_collection(collection_name)
     data = db.get()
 
     texts = data.get("documents", [])
     metas = data.get("metadatas", [])
 
-    if use_product_filter:
+    if filter_product is not None:
         filtered_pairs: list[tuple[str, dict]] = []
 
         for text, meta in zip(texts, metas, strict=True):
-            if meta and str(meta.get("product_name", "")).upper() == product_name.upper():
+            if meta and str(meta.get("product_name", "")).upper() == filter_product.upper():
                 filtered_pairs.append((text, meta))
 
         texts = [pair[0] for pair in filtered_pairs]
@@ -558,7 +564,6 @@ def get_bm25_retriever(
 def bm25_collection(
     query: str,
     collection_name: str,
-    embeddings: OpenAIEmbeddings,
     k: int = 5,
     product_name: str | None = None,
 ) -> list[Document]:
@@ -568,14 +573,11 @@ def bm25_collection(
     Uses cached BM25 retrievers.
     Product filter is applied only to catalogue collection when safe.
     """
-    use_product_filter = collection_name == COLLECTIONS[
-        "catalogue"
-    ] and should_apply_product_filter(product_name)
+    use_product_filter = _catalogue_filter(collection_name, product_name) is not None
 
     try:
         retriever = get_bm25_retriever(
             collection_name=collection_name,
-            embeddings=embeddings,
             k=k,
             product_name=product_name,
         )
@@ -601,14 +603,15 @@ def bm25_collection(
 
 def retrieve_all(
     query: str,
+    query_vector: list[float],
     collections: list[str],
-    embeddings: OpenAIEmbeddings,
     k: int = 5,
     use_bm25: bool = True,
     product_name: str | None = None,
 ) -> list[Document]:
     """
-    Retrieves from selected collections using vector retrieval and optional BM25.
+    Retrieves from selected collections using vector retrieval (by
+    `query_vector`, the embedding of `query`) and optional BM25 (by `query`).
 
     product_name is passed from the original user query so multi-query expansion
     cannot accidentally drop product filtering.
@@ -618,9 +621,8 @@ def retrieve_all(
     for collection_name in collections:
         all_docs.extend(
             retrieve_collection(
-                query=query,
+                query_vector=query_vector,
                 collection_name=collection_name,
-                embeddings=embeddings,
                 k=k,
                 product_name=product_name,
             )
@@ -631,7 +633,6 @@ def retrieve_all(
                 bm25_collection(
                     query=query,
                     collection_name=collection_name,
-                    embeddings=embeddings,
                     k=k,
                     product_name=product_name,
                 )
@@ -670,6 +671,12 @@ def deduplicate(docs: list[Document]) -> list[Document]:
     return unique
 
 
+@cache
+def _ranker() -> Ranker:
+    """FlashRank's model, loaded from disk once per process."""
+    return Ranker()
+
+
 def rerank(query: str, docs: list[Document], top_n: int = 8) -> list[Document]:
     """
     Reranks retrieved documents with FlashRank.
@@ -677,7 +684,7 @@ def rerank(query: str, docs: list[Document], top_n: int = 8) -> list[Document]:
     if not docs:
         return []
 
-    ranker = Ranker()
+    ranker = _ranker()
 
     passages = [
         {
@@ -838,7 +845,6 @@ def get_assistant_response(
     installation procedures out of reach for client-facing tool calls.
     """
     llm = get_llm(temperature=0)
-    embeddings = get_embeddings()
 
     collections = route_query_hybrid(query, allowed_collections=allowed_collections)
     product_name = detect_product(query)
@@ -847,16 +853,24 @@ def get_assistant_response(
     logger.debug("Collections selected: %s", collections)
     logger.debug("Detected product: %s", product_name)
 
-    if use_multi_query:
+    # The multi-query expansion and the translation (below) don't depend on
+    # each other, so they run in parallel: one LLM round trip instead of two.
+    # ContextThreadPoolExecutor carries this context (callbacks, the current
+    # turn's usage tracker) into the worker threads.
+    with ContextThreadPoolExecutor(max_workers=2) as pool:
         # Separate, higher-temperature LLM just for query expansion: diversity
         # of phrasing is the whole point here, and at temperature=0 the 3
         # "alternative" queries tend to come out nearly identical. The final
         # answer generation below still uses the temperature=0 `llm` — that
         # step needs precision, not creativity.
-        multi_query_llm = get_llm(temperature=0.5)
-        queries = [query] + get_multi_queries(query, multi_query_llm)
-    else:
-        queries = [query]
+        multi_queries = (
+            pool.submit(get_multi_queries, query, get_llm(temperature=0.5))
+            if use_multi_query
+            else None
+        )
+        translation = pool.submit(translate_for_retrieval, query, llm)
+        queries = [query] + (multi_queries.result() if multi_queries else [])
+        translated = translation.result()
 
     # Always add a bare-keyword variant if the query has a conversational
     # lead-in — cheap, deterministic, and not subject to the multi-query
@@ -868,18 +882,22 @@ def get_assistant_response(
     # Always add a content-language translation too — see
     # translate_for_retrieval's docstring for why cross-lingual queries
     # need this in addition to, not instead of, the above.
-    translated = translate_for_retrieval(query, llm)
     if translated:
         queries.append(translated)
 
+    # One embedding request for every query variant, reused across all
+    # collections: searching each collection by text re-embedded the same
+    # query once per collection.
+    query_vectors = get_embeddings().embed_documents(queries)
+
     docs = []
 
-    for search_query in queries:
+    for search_query, query_vector in zip(queries, query_vectors, strict=True):
         docs.extend(
             retrieve_all(
                 query=search_query,
+                query_vector=query_vector,
                 collections=collections,
-                embeddings=embeddings,
                 k=k,
                 use_bm25=use_bm25,
                 product_name=product_name,

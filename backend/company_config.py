@@ -1,6 +1,7 @@
 # Read through secrets_provider, which loads .env on import — COMPANY_CONTEXT
 # is built at import time, so it must not depend on some other module having
 # loaded .env first.
+from pathlib import Path
 from typing import TypedDict
 
 from backend.secrets_provider import get_secret
@@ -67,3 +68,10 @@ COMPANY_CONTEXT: CompanyContext = {
 
 def get_company_context() -> CompanyContext:
     return COMPANY_CONTEXT
+
+
+# The one Chroma directory everything shares: the RAG collections, the
+# ingestion scripts that build them, and the Q&A cache.
+RAG_DB_DIRECTORY = (
+    Path(__file__).resolve().parents[1] / "db" / COMPANY_CONTEXT["rag_db_directory_name"]
+)

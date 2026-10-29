@@ -252,3 +252,61 @@ def test_archive_failure_does_not_break_the_chat(make_agent):
     """No test_db here: conversation_log doesn't exist, so archiving fails."""
     agent = make_agent(RoutingFakeChatModel(system_prompts=[]))
     assert "".join(agent.stream_ask("hi", "t1", TurnResult())) == "Hello!"
+
+
+# ── input guard ───────────────────────────────────────────────────────────────
+
+
+class _UnreachableChatModel(BaseChatModel):
+    """The LLM provider is down: every call fails."""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        raise ConnectionError("provider unreachable")
+
+    @property
+    def _llm_type(self) -> str:
+        return "unreachable-chat-model"
+
+
+def _agent_with_guard(monkeypatch, chat: RoutingFakeChatModel, guard: BaseChatModel):
+    monkeypatch.setattr(
+        assistant, "get_llm", lambda **kwargs: chat if kwargs.get("streaming") else guard
+    )
+    return DoorAssistantAgent(role="client")
+
+
+def test_guard_outage_is_not_reported_as_unsafe_input(monkeypatch, test_db):
+    """Still fails closed, but tells the user the service is down instead of accusing them."""
+    chat = RoutingFakeChatModel(system_prompts=[])
+    agent = _agent_with_guard(monkeypatch, chat, _UnreachableChatModel())
+
+    reply = "".join(agent.stream_ask("hi", "t1", TurnResult()))
+
+    assert reply == assistant._GUARD_UNAVAILABLE_TEXT
+    assert chat.system_prompts == []  # the message never reached the agent
+    [row] = _archived_rows()
+    assert row["assistant_message"] == reply
+
+
+def test_unsafe_verdict_is_reported_as_unsafe(monkeypatch, scripted_llm):
+    guard = scripted_llm([AIMessage(content="UNSAFE")])
+    agent = _agent_with_guard(monkeypatch, RoutingFakeChatModel(system_prompts=[]), guard)
+
+    assert "".join(agent.stream_ask("hi", "t1", TurnResult())) == assistant._UNSAFE_INPUT_TEXT
+
+
+def test_guard_llm_is_built_once(monkeypatch, scripted_llm):
+    built = []
+
+    def fake_get_llm(**kwargs):
+        if kwargs.get("streaming"):
+            return RoutingFakeChatModel(system_prompts=[])
+        built.append(kwargs)
+        return scripted_llm([AIMessage(content="SAFE"), AIMessage(content="SAFE")])
+
+    monkeypatch.setattr(assistant, "get_llm", fake_get_llm)
+    agent = DoorAssistantAgent(role="client")
+    list(agent.stream_ask("hi", "t1", TurnResult()))
+    list(agent.stream_ask("hi again", "t1", TurnResult()))
+
+    assert len(built) == 1

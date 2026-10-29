@@ -5,6 +5,7 @@ This module provides a unified interface for using OpenRouter with LangChain,
 supporting multiple models with easy switching.
 """
 
+from functools import cache
 from typing import Any, TypedDict
 
 from backend.secrets_provider import get_secret, require_secret
@@ -61,6 +62,13 @@ OPENROUTER_MODELS: dict[str, ModelInfo] = {
 
 # Default model
 DEFAULT_MODEL = get_secret("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+
+# Without a timeout the OpenAI client waits up to 10 minutes per attempt, so a
+# provider that hangs leaves the user staring at a spinner. With streaming the
+# timeout is the longest silence allowed between two chunks (the first one
+# included), not the length of the whole reply.
+REQUEST_TIMEOUT_SECONDS = 30
+MAX_RETRIES = 2
 
 
 # ============================================================
@@ -119,6 +127,8 @@ def get_llm(
         # turns this on by itself for OpenAI's own base_url.
         stream_usage=True,
         callbacks=[USAGE_RECORDER, *kwargs.pop("callbacks", [])],
+        timeout=kwargs.pop("timeout", REQUEST_TIMEOUT_SECONDS),
+        max_retries=kwargs.pop("max_retries", MAX_RETRIES),
         **kwargs,
     )
 
@@ -172,14 +182,19 @@ def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> fl
 # ============================================================
 
 
+@cache
 def get_embeddings() -> Any:
     """
-    Get an embeddings instance. Still uses OpenAI as OpenRouter
-    doesn't provide free embeddings.
+    Get the embeddings client, created once and shared (it's thread-safe).
+    Still uses OpenAI as OpenRouter doesn't provide free embeddings.
 
     Returns:
         OpenAIEmbeddings instance
     """
     from langchain_openai import OpenAIEmbeddings
 
-    return OpenAIEmbeddings(model="text-embedding-3-small")
+    return OpenAIEmbeddings(
+        model="text-embedding-3-small",
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        max_retries=MAX_RETRIES,
+    )
