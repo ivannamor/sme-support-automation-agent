@@ -7,16 +7,18 @@ real OpenAI calls.
 
 import datetime
 import hashlib
+import json
 import math
 import os
 
 import pytest
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 from backend import checkpointing, database
+from backend.usage_tracking import USAGE_RECORDER
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -109,6 +111,73 @@ def scripted_llm():
         return ScriptedFakeChatModel(responses=list(responses))
 
     return _make
+
+
+# ── fake chat model reporting token usage (for usage accounting tests) ───────
+
+
+class UsageFakeChatModel(BaseChatModel):
+    """
+    For usage accounting tests (backend/usage_tracking.py).     Replays `replies` (then "ok") and reports `usage` for every call, the way
+    ChatOpenAI does: on the message when invoked, on a final empty chunk when
+    streamed. `model` is what the recorder reads from the invocation params.
+    """
+
+    model: str = "openai/gpt-4o-mini"
+    replies: list[AIMessage] = []
+    usage: dict | None = None
+    # OpenRouter's usage report (with its "cost"), attached to non-streamed
+    # replies only — langchain-openai drops it when streaming.
+    provider_report: dict | None = None
+
+    def bind_tools(self, tools, **kwargs):
+        return self
+
+    @property
+    def _identifying_params(self) -> dict:
+        return {"model": self.model}
+
+    def _next_reply(self, messages) -> AIMessage:
+        """Override to answer by prompt instead of in order."""
+        return self.replies.pop(0) if self.replies else AIMessage(content="ok")
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        reply = self._next_reply(messages)
+        if self.usage:
+            reply = reply.model_copy(update={"usage_metadata": self.usage})
+        if self.provider_report:
+            reply = reply.model_copy(
+                update={"response_metadata": {"token_usage": self.provider_report}}
+            )
+        return ChatResult(generations=[ChatGeneration(message=reply)])
+
+    def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+        reply = self._next_reply(messages)
+        tool_call_chunks = [
+            {"name": tc["name"], "args": json.dumps(tc["args"]), "id": tc["id"], "index": i}
+            for i, tc in enumerate(reply.tool_calls)
+        ]
+        yield ChatGenerationChunk(
+            message=AIMessageChunk(content=reply.content, tool_call_chunks=tool_call_chunks)
+        )
+        if self.usage:
+            yield ChatGenerationChunk(message=AIMessageChunk(content="", usage_metadata=self.usage))
+
+    @property
+    def _llm_type(self) -> str:
+        return "usage-fake-chat-model"
+
+
+def fake_llm_with_usage(
+    model: str, input_tokens: int, output_tokens: int, cls=UsageFakeChatModel, **kwargs
+) -> UsageFakeChatModel:
+    usage = {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+    }
+    # The recorder attached like get_llm() does.
+    return cls(model=model, usage=usage, callbacks=[USAGE_RECORDER], **kwargs)
 
 
 # ── deterministic fake embeddings (for backend/qa_cache.py tests) ────────────

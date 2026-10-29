@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -7,14 +8,14 @@ from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
-from backend.company_config import COMPANY_CONTEXT
+from backend.company_config import COMPANY_CONTEXT, RAG_DB_DIRECTORY
 from backend.llm_provider import get_embeddings
 
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
-DB_DIRECTORY = PROJECT_ROOT / "db" / "company_rag_db"
+DB_DIRECTORY = RAG_DB_DIRECTORY
 
 
 def load_jsonl(file_path: str) -> list[dict[str, Any]]:
@@ -72,12 +73,23 @@ def jsonl_to_documents(
     return documents
 
 
+def delete_collection(collection_name: str, db_directory: str = str(DB_DIRECTORY)) -> None:
+    existing_db = Chroma(persist_directory=db_directory, collection_name=collection_name)
+    with contextlib.suppress(Exception):
+        existing_db.delete_collection()
+
+
 def build_jsonl_collection(
     file_path: str,
     source_type: str,
     collection_name: str,
-    db_directory: str = "./company_rag_db",
+    db_directory: str = str(DB_DIRECTORY),
 ) -> Chroma:
+    """
+    (Re)builds the collection from the JSONL file. The old collection is
+    deleted first, so running the script again replaces the records instead
+    of adding a second copy of each.
+    """
     documents = jsonl_to_documents(
         file_path=file_path,
         source_type=source_type,
@@ -86,6 +98,7 @@ def build_jsonl_collection(
     print(f"Loaded {len(documents)} JSONL records from {file_path}")
 
     embeddings = get_embeddings()
+    delete_collection(collection_name, db_directory)
 
     vector_db = Chroma.from_documents(
         documents=documents,
@@ -104,18 +117,19 @@ if __name__ == "__main__":
     json_faq_path = DATA_DIR / "faqs" / "faq.jsonl"
     json_glossary_path = DATA_DIR / "glossary" / "glossary.jsonl"
 
-    # The FAQ half is independent of the glossary half — isolate it so a
-    # missing/not-yet-created data/faqs/faq.jsonl doesn't prevent the
-    # glossary collection from being built.
-    try:
+    # FAQs are optional (see "Optional: static FAQs" in the README): without
+    # data/faqs/faq.jsonl the collection is emptied, so deleting the file and
+    # re-running the script switches them off again.
+    if json_faq_path.exists():
         build_jsonl_collection(
             file_path=str(json_faq_path),
             source_type="faq",
             collection_name=COMPANY_CONTEXT["faq_collection_name"],
             db_directory=str(DB_DIRECTORY),
         )
-    except FileNotFoundError:
-        print(f"Skipping FAQ collection — {json_faq_path} not found yet.")
+    else:
+        delete_collection(COMPANY_CONTEXT["faq_collection_name"])
+        print(f"No FAQs — {json_faq_path} not found (see data/faqs/faq.example.jsonl).")
 
     build_jsonl_collection(
         file_path=str(json_glossary_path),

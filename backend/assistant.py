@@ -204,6 +204,16 @@ class ToolCallCaptureHandler(BaseCallbackHandler):
         return self.tool_calls
 
 
+class GuardUnavailableError(Exception):
+    """The safety guard couldn't classify the input (e.g. the LLM provider is down)."""
+
+
+_UNSAFE_INPUT_TEXT = "⚠️ Security Alert: The input was flagged as unsafe."
+_GUARD_UNAVAILABLE_TEXT = (
+    "⚠️ The assistant is temporarily unavailable. Please try again in a moment."
+)
+
+
 def _empty_usage() -> dict[str, int]:
     return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
@@ -343,6 +353,10 @@ class DoorAssistantAgent:
             max_tokens=700,
             streaming=True,
         )
+        # Separate non-streaming LLM so `self.llm` state never affects the guard.
+        self._guard_llm = get_llm(
+            model_name=self.model_name, temperature=0, max_tokens=10, streaming=False
+        )
         self.model_info = get_model_info(self.model_name)
 
         tool_factory = self._ROLE_TOOLS.get(role, self._ROLE_TOOLS["manager"])
@@ -373,7 +387,12 @@ class DoorAssistantAgent:
         return self._role_template.format(shared=shared, **format_args)
 
     def is_input_safe(self, user_input: str) -> bool:
-        """Lightweight input guard. Fails closed on errors."""
+        """
+        Lightweight input guard. Fails closed: an unexpected verdict counts as
+        unsafe, and if the guard can't run at all it raises
+        GuardUnavailableError — the message still doesn't reach the agent, but
+        the user is told the service is down instead of being accused.
+        """
         if not user_input or not user_input.strip():
             return False
 
@@ -392,26 +411,32 @@ class DoorAssistantAgent:
         )
 
         try:
-            # Use a dedicated non-streaming LLM so `self.llm` state never affects the guard.
-            guard_llm = get_llm(
-                model_name=self.model_name, temperature=0, max_tokens=10, streaming=False
-            )
-            raw = guard_llm.invoke(guard_prompt).content
-            # Handle models that return content as a list of blocks.
-            if isinstance(raw, list):
-                raw = " ".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in raw)
-            text = str(raw).strip().upper()
-            # Check UNSAFE before SAFE because "UNSAFE" contains "SAFE".
-            if "UNSAFE" in text:
-                return False
-            if "SAFE" in text:
-                return True
-            # Model returned something unexpected — fail closed.
-            logger.warning(f"[GUARD_UNEXPECTED_RESPONSE] '{text[:50]}' — failing closed")
-            return False
+            raw = self._guard_llm.invoke(guard_prompt).content
         except Exception as exc:
             logger.error(f"[GUARD_FAILURE] {exc}")
+            raise GuardUnavailableError from exc
+
+        # Handle models that return content as a list of blocks.
+        if isinstance(raw, list):
+            raw = " ".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in raw)
+        text = str(raw).strip().upper()
+        # Check UNSAFE before SAFE because "UNSAFE" contains "SAFE".
+        if "UNSAFE" in text:
             return False
+        if "SAFE" in text:
+            return True
+        # Model returned something unexpected — fail closed.
+        logger.warning(f"[GUARD_UNEXPECTED_RESPONSE] '{text[:50]}' — failing closed")
+        return False
+
+    def _input_alert(self, query: str) -> str | None:
+        """None if the message may reach the agent, otherwise the reply to show instead."""
+        try:
+            if self.is_input_safe(query):
+                return None
+        except GuardUnavailableError:
+            return _GUARD_UNAVAILABLE_TEXT
+        return _UNSAFE_INPUT_TEXT
 
     def _graph_config(
         self, thread_id: str, handler: ToolCallCaptureHandler, request_id: str
@@ -432,8 +457,8 @@ class DoorAssistantAgent:
         pending HITL interrupt (if any).
         """
         with self._turn_usage(result):
-            if not self.is_input_safe(query):
-                alert = "⚠️ Security Alert: The input was flagged as unsafe."
+            alert = self._input_alert(query)
+            if alert:
                 yield alert
                 self._archive_turn(thread_id, query, alert, [], hitl_decision=None)
                 return

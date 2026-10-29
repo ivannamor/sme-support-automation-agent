@@ -28,13 +28,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
 
-from backend.company_config import COMPANY_CONTEXT
+from backend.company_config import COMPANY_CONTEXT, RAG_DB_DIRECTORY
 from backend.llm_provider import get_embeddings, get_llm
 
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DB_DIRECTORY = str(PROJECT_ROOT / "db" / "company_rag_db")
+DB_DIRECTORY = str(RAG_DB_DIRECTORY)
 GLOSSARY_PATH = PROJECT_ROOT / "data" / "glossary" / "glossary.jsonl"
 
 SOURCE_COLLECTIONS = [

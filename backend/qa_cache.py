@@ -8,21 +8,24 @@ the cache and avoid retriggering the full RAG pipeline.
 
 import logging
 from datetime import UTC, datetime
-from pathlib import Path
 
 from langchain_chroma import Chroma
+from langchain_core.documents import Document
 
+from backend.company_config import RAG_DB_DIRECTORY
 from backend.database import get_connection
 from backend.llm_provider import get_embeddings
 
 logger = logging.getLogger("QACache")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DB_DIRECTORY = str(PROJECT_ROOT / "db" / "company_rag_db")
+DB_DIRECTORY = str(RAG_DB_DIRECTORY)
 COLLECTION_NAME = "qa_cache"
-SIMILARITY_THRESHOLD = 0.88  # cosine similarity; 1.0 = identical
-# 0.88 catches clear rephrasing of the same question (e.g. "What is X?" / "Tell me about X?")
-# while keeping "What is X?" and "How do I install X?" apart (~0.78-0.83).
+# Cosine similarity of the two questions' embeddings; 1.0 = identical. 0.915
+# is the cut-off the cache has always applied in practice: it used to compare
+# 0.88 against LangChain's relevance score for this collection's squared-L2
+# distance, which for unit vectors is 1 - (2 - 2·cos)/√2, so 0.88 there meant
+# cos ≈ 0.915. Re-tune it against real question pairs before changing it.
+SIMILARITY_THRESHOLD = 0.915
 
 
 # ── internal helpers ──────────────────────────────────────────────────────────
@@ -36,13 +39,24 @@ def _store() -> Chroma:
     )
 
 
+def _closest(question: str) -> tuple[Document, float] | None:
+    """
+    The cached question nearest to `question`, with its cosine similarity.
+    The collection uses Chroma's default squared-L2 distance; OpenAI
+    embeddings are unit-length, so cos = 1 - distance / 2.
+    """
+    results = _store().similarity_search_with_score(question, k=1)
+    if not results:
+        return None
+    doc, distance = results[0]
+    return doc, 1 - distance / 2
+
+
 def _approved_cache_hit(question: str) -> bool:
     """True if an approved entry already covers this question."""
     try:
-        results = _store().similarity_search_with_relevance_scores(question, k=1)
-        if results:
-            _, score = results[0]
-            return score >= SIMILARITY_THRESHOLD
+        match = _closest(question)
+        return match is not None and match[1] >= SIMILARITY_THRESHOLD
     except Exception as exc:
         logger.warning(f"QA_CACHE_DUP_CHECK_FAILED: {exc}")
     return False
@@ -57,11 +71,11 @@ def lookup(query: str) -> str | None:
     or None if the cache has no relevant entry.
     """
     try:
-        results = _store().similarity_search_with_relevance_scores(query, k=1)
-        if results:
-            doc, score = results[0]
-            if score >= SIMILARITY_THRESHOLD:
-                logger.info(f"QA_CACHE_HIT: score={score:.4f} q='{query[:70]}'")
+        match = _closest(query)
+        if match is not None:
+            doc, similarity = match
+            if similarity >= SIMILARITY_THRESHOLD:
+                logger.info(f"QA_CACHE_HIT: cosine={similarity:.4f} q='{query[:70]}'")
                 return doc.metadata.get("answer", "")
     except Exception as exc:
         logger.warning(f"QA_CACHE_LOOKUP_FAILED: {exc}")

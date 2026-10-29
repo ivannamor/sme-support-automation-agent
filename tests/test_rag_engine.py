@@ -1,14 +1,19 @@
 """
-Light-coverage tests for rag/rag_engine.py's pure functions — deduplication
-and product-name detection. The full hybrid retrieval pipeline (vector + BM25
-+ multi-query + reranking) needs real, populated Chroma collections and is
-intentionally left to manual/RAGAS-based evaluation (evaluation/evaluate_rag.py)
-rather than unit tests here.
+Tests for rag/rag_engine.py: its pure functions (deduplication, product-name
+detection) and the pipeline's plumbing — one embedding request per search,
+parallel LLM calls still counted — on a throwaway Chroma directory with fake
+embeddings and a fake LLM. Answer *quality* is left to RAGAS-based evaluation
+(evaluation/evaluate_rag.py).
 """
 
+import pytest
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessage
 
-from rag.rag_engine import deduplicate, detect_product
+from backend.usage_tracking import track_usage
+from rag import rag_engine
+from rag.rag_engine import COLLECTIONS, deduplicate, detect_product
+from tests.conftest import FakeEmbeddings, UsageFakeChatModel, fake_llm_with_usage
 
 
 def test_deduplicate_removes_exact_duplicates():
@@ -43,3 +48,97 @@ def test_detect_product_matches_multi_word_product_with_loose_spacing():
 
 def test_detect_product_returns_none_when_no_product_mentioned():
     assert detect_product("Come funziona la garanzia in generale?") is None
+
+
+# ── pipeline plumbing ─────────────────────────────────────────────────────────
+
+
+class CountingEmbeddings(FakeEmbeddings):
+    def __init__(self) -> None:
+        self.document_calls: list[list[str]] = []
+        self.query_calls: list[str] = []
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.document_calls.append(list(texts))
+        return super().embed_documents(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        self.query_calls.append(text)
+        return super().embed_query(text)
+
+
+class RagFakeChatModel(UsageFakeChatModel):
+    """Answers each of the pipeline's prompts in kind."""
+
+    def _next_reply(self, messages) -> AIMessage:
+        prompt = messages[-1].content
+        if "alternative search queries" in prompt:
+            return AIMessage(content="clean glass\nglass cleaning\nwindow care")
+        if prompt.startswith("Translate"):
+            return AIMessage(content="come pulire il vetro")
+        return AIMessage(content="final answer")
+
+
+QUESTION = "how do I clean the glass?"
+
+
+@pytest.fixture
+def rag_store(tmp_path, monkeypatch):
+    """Maintenance + glossary collections on disk; the FAQ collection stays empty."""
+    embeddings = CountingEmbeddings()
+    monkeypatch.setattr(rag_engine, "DB_DIRECTORY", str(tmp_path / "chroma"))
+    monkeypatch.setattr(rag_engine, "get_embeddings", lambda: embeddings)
+    monkeypatch.setattr(rag_engine, "BM25_CACHE", {})
+    monkeypatch.setattr(rag_engine, "rerank", lambda query, docs, top_n=8: docs[:top_n])
+    rag_engine.load_collection.cache_clear()
+    docs = {
+        COLLECTIONS["maintenance"]: ["Clean the glass with water.", "Lubricate the hinges."],
+        COLLECTIONS["glossary"]: ["Vetro: glass pane.", "Guarnizione: seal."],
+    }
+    for name, texts in docs.items():
+        rag_engine.load_collection(name).add_texts(
+            texts, metadatas=[{"source": f"{name}-{i}"} for i in range(len(texts))]
+        )
+    embeddings.document_calls.clear()
+    yield embeddings
+    rag_engine.load_collection.cache_clear()
+
+
+@pytest.fixture
+def rag_llm(monkeypatch):
+    monkeypatch.setattr(
+        rag_engine,
+        "get_llm",
+        lambda **kwargs: fake_llm_with_usage("openai/gpt-4o-mini", 10, 5, cls=RagFakeChatModel),
+    )
+
+
+def test_search_embeds_all_query_variants_in_one_request(rag_store, rag_llm):
+    answer, docs = rag_engine.get_assistant_response(QUESTION)
+
+    assert answer == "final answer"
+    assert docs
+    # Before: one embedding request per query variant per collection.
+    [batch] = rag_store.document_calls
+    assert batch[0] == QUESTION
+    assert {"clean glass", "window care", "come pulire il vetro"} <= set(batch)
+    assert rag_store.query_calls == []
+
+
+def test_search_by_vector_matches_search_by_text(rag_store):
+    name = COLLECTIONS["maintenance"]
+    vector = rag_store.embed_documents(["clean the glass"])[0]
+
+    by_vector = rag_engine.retrieve_collection(vector, name, k=2)
+    by_text = rag_engine.load_collection(name).similarity_search("clean the glass", k=2)
+
+    assert [d.page_content for d in by_vector] == [d.page_content for d in by_text]
+
+
+def test_parallel_llm_calls_are_counted_in_the_turn(rag_store, rag_llm, test_db):
+    """Multi-query and translation run in worker threads — they must still reach the tracker."""
+    with track_usage("client") as usage:
+        rag_engine.get_assistant_response(QUESTION)
+
+    # Multi-query + translation + answer, 10 input tokens each.
+    assert usage.totals()["input_tokens"] == 30

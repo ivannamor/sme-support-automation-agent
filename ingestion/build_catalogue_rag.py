@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
+from backend.company_config import RAG_DB_DIRECTORY
 from backend.llm_provider import get_embeddings
 from ingestion.webscraping_utils import build_web_documents, load_urls_from_file
 
@@ -15,7 +16,7 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
-DB_DIRECTORY = PROJECT_ROOT / "db" / "company_rag_db"
+DB_DIRECTORY = RAG_DB_DIRECTORY
 CATALOGUE_COLLECTION = "catalogue_specs"
 WEBSITE_URLS_PATH = DATA_DIR / "website.txt"
 

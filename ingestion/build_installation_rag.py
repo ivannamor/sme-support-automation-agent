@@ -8,14 +8,14 @@ from langchain_core.documents import Document
 from llama_parse import LlamaParse
 from pydantic import BaseModel
 
-from backend.company_config import COMPANY_CONTEXT
+from backend.company_config import COMPANY_CONTEXT, RAG_DB_DIRECTORY
 from backend.llm_provider import get_embeddings
 
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
-DB_DIRECTORY = PROJECT_ROOT / "db" / "company_rag_db"
+DB_DIRECTORY = RAG_DB_DIRECTORY
 
 # ============================================================
 # 1. Data model
