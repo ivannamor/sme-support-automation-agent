@@ -6,8 +6,8 @@ inventory HTTP API) so no test makes a real network/API call.
 """
 
 import tools
-from backend.log_context import username_var
 from backend.database import get_connection, ticket_code
+from backend.log_context import username_var
 from tests.conftest import future_date
 
 
@@ -206,7 +206,7 @@ def test_request_site_survey_tool_rejects_past_date(test_db, monkeypatch):
 
 # ── extract_booking_fields (mocks the LLM structured-output call) ────────────
 
-def test_extract_booking_fields_returns_only_mentioned_fields(monkeypatch):
+def test_extract_booking_fields_returns_only_mentioned_fields(test_db, monkeypatch):
     from tools import BookingFormExtraction
 
     class _FakeStructuredLLM:
@@ -347,7 +347,7 @@ def _make_open_installation_ticket() -> int:
 
 
 def _make_survey_ticket_in_progress() -> int:
-    from backend.database import create_pending_booking, resolve_booking, claim_booking
+    from backend.database import claim_booking, create_pending_booking, resolve_booking
     bid = create_pending_booking(
         model="IRIS", date_str="2026-08-01", time_str="10:00", ticket_phase="survey",
         client_address="Via Roma 1",

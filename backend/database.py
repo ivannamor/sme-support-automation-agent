@@ -2,10 +2,9 @@ import datetime
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from backend.company_config import COMPANY_CONTEXT
-
 
 # ============================================================
 # Paths
@@ -27,7 +26,7 @@ CATALOGUE_SECTIONS_PATH = (
 
 def load_catalogue_products(
     sections_path: Path = CATALOGUE_SECTIONS_PATH,
-) -> List[str]:
+) -> list[str]:
     """
     Loads all product_name values from the reviewed catalogue sections JSON.
 
@@ -41,10 +40,10 @@ def load_catalogue_products(
             "Run/fix the catalogue ingestion first, or check the sections path."
         )
 
-    with open(sections_path, "r", encoding="utf-8") as file:
+    with open(sections_path, encoding="utf-8") as file:
         sections = json.load(file)
 
-    products: List[str] = []
+    products: list[str] = []
 
     for section in sections:
         if section.get("doc_type") != "product":
@@ -120,7 +119,7 @@ def generate_mock_stock(model: str) -> int:
     return sum(ord(char) for char in model) % 18
 
 
-def build_inventory_seed_items() -> List[tuple]:
+def build_inventory_seed_items() -> list[tuple]:
     """
     Builds seed rows for the inventory table from catalogue products.
     """
@@ -165,6 +164,14 @@ def get_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     return conn
+
+
+def _inserted_id(cursor: sqlite3.Cursor) -> int:
+    """Row id of the INSERT just run on `cursor` (sqlite3 types lastrowid as Optional)."""
+    row_id = cursor.lastrowid
+    if row_id is None:
+        raise RuntimeError("INSERT did not produce a row id")
+    return row_id
 
 
 def init_db(reset: bool = False) -> None:
@@ -554,7 +561,7 @@ def init_db(reset: bool = False) -> None:
 # Inventory helpers for tools.py / assistant.py
 # ============================================================
 
-def get_inventory() -> List[Dict[str, Any]]:
+def get_inventory() -> list[dict[str, Any]]:
     """
     Returns the full inventory table as a list of dictionaries.
     """
@@ -575,7 +582,7 @@ def get_inventory() -> List[Dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-def get_product(model: str) -> Optional[Dict[str, Any]]:
+def get_product(model: str) -> dict[str, Any] | None:
     """
     Returns one inventory item by exact model name.
     """
@@ -719,7 +726,7 @@ def get_business_analytics(period: str = "month") -> dict:
     total_revenue  = sum(r["estimated_price"] or 0 for r in rows)
     total_hours    = sum((r["quantity"] or 1) * (r["installation_hours"] or 0) for r in rows)
 
-    by_day: Dict[str, Dict[str, float]] = {}
+    by_day: dict[str, dict[str, float]] = {}
     for r in rows:
         day = r["closed_at"][:10]
         entry = by_day.setdefault(day, {"closed": 0, "revenue": 0.0})
@@ -767,7 +774,7 @@ def create_job_completion(
     structured_report: str,
     raw_notes: str = "",
     client_email: str = "",
-    booking_id: Optional[int] = None,
+    booking_id: int | None = None,
 ) -> int:
     conn = get_connection()
     cursor = conn.execute(
@@ -778,7 +785,7 @@ def create_job_completion(
         """,
         (sent_by, booking_id, structured_report, raw_notes, client_email),
     )
-    job_id = cursor.lastrowid
+    job_id = _inserted_id(cursor)
     # Advance ticket to IN REVIEW.
     if booking_id:
         conn.execute(
@@ -791,7 +798,7 @@ def create_job_completion(
     return job_id
 
 
-def get_job_completions(status: str = "pending") -> List[Dict[str, Any]]:
+def get_job_completions(status: str = "pending") -> list[dict[str, Any]]:
     conn = get_connection()
     rows = conn.execute(
         """
@@ -867,7 +874,7 @@ def create_user(username: str, password_hash: str, role: str) -> bool:
         conn.close()
 
 
-def get_user(username: str) -> Optional[Dict[str, Any]]:
+def get_user(username: str) -> dict[str, Any] | None:
     """Returns user row dict or None."""
     conn = get_connection()
     row = conn.execute(
@@ -911,7 +918,7 @@ def upsert_client(full_name: str, email: str, phone: str = "", address: str = ""
     return client_id
 
 
-def get_clients() -> List[Dict[str, Any]]:
+def get_clients() -> list[dict[str, Any]]:
     """Returns the full client directory, most recently updated first."""
     conn = get_connection()
     rows = conn.execute(
@@ -938,9 +945,9 @@ def create_pending_booking(
     client_address: str = "",
     quantity: int = 1,
     ticket_phase: str = "installation",
-    client_id: Optional[int] = None,
-    client_lat: Optional[float] = None,
-    client_lon: Optional[float] = None,
+    client_id: int | None = None,
+    client_lat: float | None = None,
+    client_lon: float | None = None,
     ticket_type: str = "window",
 ) -> int:
     """Inserts a pending booking and returns its new id."""
@@ -961,7 +968,7 @@ def create_pending_booking(
          time_str if ticket_phase == "survey" else None,
          client_lat, client_lon, ticket_type),
     )
-    booking_id = cursor.lastrowid
+    booking_id = _inserted_id(cursor)
     _log_ticket_status(conn, booking_id, "new", requested_by)
     conn.commit()
     conn.close()
@@ -981,7 +988,7 @@ _BOOKING_COLUMNS = """
 """
 
 
-def get_pending_bookings(status: str = "pending") -> List[Dict[str, Any]]:
+def get_pending_bookings(status: str = "pending") -> list[dict[str, Any]]:
     """Returns booking rows filtered by status."""
     conn = get_connection()
     rows = conn.execute(
@@ -997,7 +1004,7 @@ def get_pending_bookings(status: str = "pending") -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def get_approved_bookings(assigned_to: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_approved_bookings(assigned_to: str | None = None) -> list[dict[str, Any]]:
     """
     Returns approved bookings that are not yet closed/cancelled — those are
     finished/dead tickets and must not show up as active/claimable/blocking.
@@ -1124,13 +1131,13 @@ def decline_booking(booking_id: int, installer_username: str, reason: str) -> in
         """,
         (installer_username, reason, structured, f"Declined booking {code}"),
     )
-    alert_id = cursor.lastrowid
+    alert_id = _inserted_id(cursor)
     conn.commit()
     conn.close()
     return alert_id
 
 
-def get_installer_active_booking(installer_username: str) -> Optional[Dict[str, Any]]:
+def get_installer_active_booking(installer_username: str) -> dict[str, Any] | None:
     """Returns the single non-closed booking currently claimed by this installer, or None."""
     conn = get_connection()
     row = conn.execute(
@@ -1233,8 +1240,8 @@ def reject_survey_report(booking_id: int, resolved_by: str) -> bool:
 def resolve_client_estimate_response(
     booking_id: int,
     response: str,
-    new_date_str: Optional[str] = None,
-    new_time_str: Optional[str] = None,
+    new_date_str: str | None = None,
+    new_time_str: str | None = None,
     changed_by: str = "",
     *,
     client_email: str,
@@ -1287,7 +1294,7 @@ def resolve_client_estimate_response(
     return updated
 
 
-def find_tickets_by_email(client_email: str, ticket_status: Optional[str] = None) -> List[Dict[str, Any]]:
+def find_tickets_by_email(client_email: str, ticket_status: str | None = None) -> list[dict[str, Any]]:
     """
     Finds tickets by client email (case-insensitive), optionally filtered by
     ticket_status. Callers must pass a *verified* email — this does no
@@ -1312,7 +1319,7 @@ def find_tickets_by_email(client_email: str, ticket_status: Optional[str] = None
     return [dict(r) for r in rows]
 
 
-def get_booking(booking_id: int) -> Optional[Dict[str, Any]]:
+def get_booking(booking_id: int) -> dict[str, Any] | None:
     """Returns one ticket by id, or None."""
     conn = get_connection()
     row = conn.execute(
@@ -1327,7 +1334,7 @@ def ticket_code(ticket_id: int) -> str:
     return f"TKT-{ticket_id:05d}"
 
 
-def get_all_tickets() -> List[Dict[str, Any]]:
+def get_all_tickets() -> list[dict[str, Any]]:
     """Returns all non-rejected bookings ordered by ticket priority for the manager board."""
     conn = get_connection()
     rows = conn.execute(
@@ -1366,7 +1373,7 @@ def _log_ticket_status(conn, booking_id: int, ticket_status: str, changed_by: st
     )
 
 
-def get_ticket_log(booking_id: int) -> List[Dict[str, Any]]:
+def get_ticket_log(booking_id: int) -> list[dict[str, Any]]:
     """Returns the full status-change history for a ticket, oldest first."""
     conn = get_connection()
     rows = conn.execute(
@@ -1453,7 +1460,7 @@ GLASS_TYPES = {
 }
 
 
-def get_costs() -> Dict[str, float]:
+def get_costs() -> dict[str, float]:
     """Returns all cost variables as a key→value dict."""
     conn = get_connection()
     rows = conn.execute("SELECT key, value FROM installation_costs").fetchall()
@@ -1484,7 +1491,7 @@ def create_alert(
     raw_message: str,
     structured_message: str,
     job_reference: str = "",
-    booking_id: Optional[int] = None,
+    booking_id: int | None = None,
 ) -> int:
     conn = get_connection()
     cursor = conn.execute(
@@ -1494,7 +1501,7 @@ def create_alert(
         """,
         (sent_by, raw_message, structured_message, job_reference, booking_id or None),
     )
-    alert_id = cursor.lastrowid
+    alert_id = _inserted_id(cursor)
     # Set linked ticket to BLOCKED.
     if booking_id:
         conn.execute(
@@ -1507,7 +1514,7 @@ def create_alert(
     return alert_id
 
 
-def get_alerts(unread_only: bool = False) -> List[Dict[str, Any]]:
+def get_alerts(unread_only: bool = False) -> list[dict[str, Any]]:
     conn = get_connection()
     query = (
         "SELECT id, sent_by, raw_message, structured_message, job_reference, "
@@ -1521,7 +1528,7 @@ def get_alerts(unread_only: bool = False) -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def get_alerts_for_booking(booking_id: int) -> List[Dict[str, Any]]:
+def get_alerts_for_booking(booking_id: int) -> list[dict[str, Any]]:
     """Returns all alerts linked to a specific booking, newest first."""
     conn = get_connection()
     rows = conn.execute(
@@ -1533,7 +1540,7 @@ def get_alerts_for_booking(booking_id: int) -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def mark_alerts_read(alert_ids: List[int]) -> None:
+def mark_alerts_read(alert_ids: list[int]) -> None:
     if not alert_ids:
         return
     conn = get_connection()
@@ -1565,7 +1572,7 @@ def create_pending_reservation(
         """,
         (requested_by, model, quantity, reason),
     )
-    reservation_id = cursor.lastrowid
+    reservation_id = _inserted_id(cursor)
     conn.commit()
     conn.close()
     return reservation_id
@@ -1573,8 +1580,8 @@ def create_pending_reservation(
 
 def get_pending_reservations(
     status: str = "pending",
-    requested_by: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    requested_by: str | None = None,
+) -> list[dict[str, Any]]:
     conn = get_connection()
     if requested_by:
         rows = conn.execute(

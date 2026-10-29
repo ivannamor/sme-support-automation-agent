@@ -2,13 +2,14 @@
 Manager page — ticket dashboard (tickets/clients/alerts/cache/analytics) + chat.
 """
 
-import sys
 import datetime
+import sys
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
+# TODO PR 11: drop with the app/ restructure (imports ui_shared as top-level).
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APP_DIR      = Path(__file__).resolve().parents[1]
 for p in (str(PROJECT_ROOT), str(APP_DIR)):
@@ -16,29 +17,49 @@ for p in (str(PROJECT_ROOT), str(APP_DIR)):
         sys.path.insert(0, p)
 
 from ui_shared import (
-    require_auth, get_agent, init_chat_session, t,
-    render_sidebar, render_chat_history,
-    render_hitl_and_input, handle_user_turn,
-    render_page_header, render_ticket_card, ticket_code, render_stat_tiles,
-    render_ticket_map, render_ticket_summary, render_column_resize_handle,
+    get_agent,
+    handle_user_turn,
+    init_chat_session,
     render_chat_autoscroll,
+    render_chat_history,
+    render_column_resize_handle,
+    render_hitl_and_input,
+    render_page_header,
+    render_sidebar,
+    render_stat_tiles,
+    render_ticket_card,
+    render_ticket_map,
+    render_ticket_summary,
+    require_auth,
+    t,
+    ticket_code,
 )
+
 from backend.database import (
-    get_all_tickets, get_alerts_for_booking,
-    get_alerts, mark_alerts_read,
-    get_job_completions, resolve_job_completion,
-    get_usage_stats, get_business_analytics,
+    get_alerts,
+    get_alerts_for_booking,
+    get_all_tickets,
+    get_business_analytics,
+    get_clients,
+    get_job_completions,
+    get_usage_stats,
+    mark_alerts_read,
     reset_operational_data,
-    get_clients, update_ticket_details,
-)
-from backend.qa_cache import get_pending as qa_get_pending, approve as qa_approve, reject as qa_reject
-from tools import (
-    approve_booking_tool, reject_booking_tool,
-    approve_survey_estimate_tool, reject_survey_estimate_tool,
-    _THANKYOU_EMAIL_TEMPLATE,
+    resolve_job_completion,
+    update_ticket_details,
 )
 from backend.email_utils import send_email
 from backend.llm_provider import get_llm
+from backend.qa_cache import approve as qa_approve
+from backend.qa_cache import get_pending as qa_get_pending
+from backend.qa_cache import reject as qa_reject
+from tools import (
+    _THANKYOU_EMAIL_TEMPLATE,
+    approve_booking_tool,
+    approve_survey_estimate_tool,
+    reject_booking_tool,
+    reject_survey_estimate_tool,
+)
 
 st.set_page_config(page_title="Manager Portal", page_icon=None, layout="wide")
 
@@ -109,23 +130,24 @@ with panel_col:
             # Collect all NEW ticket IDs for batch approval (survey requests only).
             new_tickets = [tk for tk in tickets if tk.get("ticket_status") == "new"]
             with batch_col:
-                if new_tickets:
-                    if st.button(t("approve_all_new").format(count=len(new_tickets)), use_container_width=True):
-                        approved, failed = 0, []
-                        for tk in new_tickets:
-                            if not st.session_state.get(f"sel_{tk['id']}", True):
-                                continue
-                            result = approve_booking_tool.invoke({"booking_id": tk["id"]})
-                            if "approved and added to calendar" in result:
-                                approved += 1
-                            else:
-                                failed.append(f"{ticket_code(tk['id'])}: {result}")
-                        if approved:
-                            st.success(t("approved_n_tickets").format(count=approved))
-                        for err in failed:
-                            st.error(err)
-                        if approved:
-                            st.rerun()
+                if new_tickets and st.button(
+                    t("approve_all_new").format(count=len(new_tickets)), use_container_width=True
+                ):
+                    approved, failed = 0, []
+                    for tk in new_tickets:
+                        if not st.session_state.get(f"sel_{tk['id']}", True):
+                            continue
+                        result = approve_booking_tool.invoke({"booking_id": tk["id"]})
+                        if "approved and added to calendar" in result:
+                            approved += 1
+                        else:
+                            failed.append(f"{ticket_code(tk['id'])}: {result}")
+                    if approved:
+                        st.success(t("approved_n_tickets").format(count=approved))
+                    for err in failed:
+                        st.error(err)
+                    if approved:
+                        st.rerun()
 
             # Pre-fetch pending job completions indexed by booking_id (installation phase).
             pending_jobs = {
@@ -421,7 +443,8 @@ with panel_col:
                                 qa_reject(item["id"])
                                 st.rerun()
 
-        _period_format = lambda p: {"day": t("period_day"), "week": t("period_week"), "month": t("period_month")}[p]
+        def _period_format(p):
+            return {"day": t("period_day"), "week": t("period_week"), "month": t("period_month")}[p]
 
         # ── business analytics (tickets/revenue/hours) ──────────────────────────────
         with tab_analytics:
@@ -467,20 +490,19 @@ with panel_col:
 # ═══════════════════════════════════════════════════════════════════════════════
 # LEFT PANEL — CHAT
 # ═══════════════════════════════════════════════════════════════════════════════
-with chat_col:
-    with st.container(key="chat_zone", height="stretch"):
-        st.subheader(t("assistant_label"))
-        selected_model = render_sidebar("manager")
-        agent = get_agent(selected_model, "manager")
+with chat_col, st.container(key="chat_zone", height="stretch"):
+    st.subheader(t("assistant_label"))
+    selected_model = render_sidebar("manager")
+    agent = get_agent(selected_model, "manager")
 
-        render_chat_history(agent)
+    render_chat_history(agent)
 
-        user_prompt = render_hitl_and_input(
-            agent, selected_model,
-            prompt_hint=t("manager_sub"),
-        )
+    user_prompt = render_hitl_and_input(
+        agent, selected_model,
+        prompt_hint=t("manager_sub"),
+    )
 
-        if user_prompt:
-            handle_user_turn(user_prompt, agent, selected_model)
+    if user_prompt:
+        handle_user_turn(user_prompt, agent, selected_model)
 
-        render_chat_autoscroll()
+    render_chat_autoscroll()

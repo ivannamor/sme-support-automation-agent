@@ -8,7 +8,6 @@ A routing fake chat model replaces the real LLM; no API calls are made.
 import datetime
 import threading
 import types
-from typing import List, Optional
 
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -17,7 +16,6 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 
 import backend.assistant as assistant
 from backend.assistant import DoorAssistantAgent, TurnResult
-
 
 _SURVEY_CALL = {
     "name": "request_site_survey_tool",
@@ -38,8 +36,8 @@ class RoutingFakeChatModel(BaseChatModel):
     waits on a barrier so concurrent turns are guaranteed to overlap, and
     records every system prompt it receives.
     """
-    barrier: Optional[threading.Barrier] = None
-    system_prompts: List[str] = []
+    barrier: threading.Barrier | None = None
+    system_prompts: list[str] = []
 
     model_config = {"arbitrary_types_allowed": True}
 

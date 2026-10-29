@@ -1,15 +1,15 @@
-import sys
-from pathlib import Path
 import hmac
 import logging
 import sqlite3
-
+import sys
 from logging.handlers import RotatingFileHandler
-from fastapi import FastAPI, HTTPException, Path as PathParam, Security, Depends
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException, Security
+from fastapi import Path as PathParam
 from fastapi.responses import JSONResponse
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
-
 
 # ============================================================
 # Project paths
@@ -21,12 +21,12 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Run standalone (python app/api_server.py) as well as via run.py — make sure
 # the project root is importable either way.
+# TODO PR 11: drop once app/ is restructured (run as `python -m app.api_server`).
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend import database
 from backend.secrets_provider import get_secret
-
 
 # ============================================================
 # Logging

@@ -20,51 +20,76 @@ project/
 └── .env
 """
 
+import datetime
+import logging
 import re
 import time
-import logging
-import datetime
 from pathlib import Path
-from typing import Literal, Optional, Tuple
+from typing import Literal
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import requests
-from requests.exceptions import ConnectionError, Timeout, HTTPError
-from pydantic import BaseModel, Field
-from langchain.tools import tool
+from google.auth.transport.requests import Request
 
 # --- GOOGLE SPECIFIC IMPORTS ---
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from langchain.tools import tool
+from pydantic import BaseModel, Field
+from requests.exceptions import ConnectionError, HTTPError, Timeout
 
-# --- PROJECT IMPORTS ---
-from rag.rag_engine import get_assistant_response
+from backend.company_config import COMPANY_CONTEXT
 from backend.database import (
-    create_pending_booking, create_pending_reservation, create_alert,
-    get_pending_reservations, resolve_reservation, reopen_reservation,
-    get_product, get_costs, update_cost, VALID_COST_KEYS, GLASS_TYPES,
-    create_job_completion, get_booking_client_email,
-    get_pending_bookings, resolve_booking,
-    get_job_completions, resolve_job_completion,
-    get_approved_bookings, claim_booking, release_booking,
-    ticket_code, upsert_client, save_survey_measurements, resolve_survey_estimate,
-    reject_survey_report, resolve_client_estimate_response, find_tickets_by_email,
-    get_all_tickets, update_ticket_details, get_inventory, get_booking,
+    GLASS_TYPES,
+    VALID_COST_KEYS,
+    claim_booking,
+    create_alert,
+    create_job_completion,
+    create_pending_booking,
+    create_pending_reservation,
+    find_tickets_by_email,
+    get_all_tickets,
+    get_approved_bookings,
+    get_booking,
+    get_booking_client_email,
+    get_costs,
+    get_inventory,
+    get_job_completions,
+    get_pending_bookings,
+    get_pending_reservations,
+    get_product,
+    reject_survey_report,
+    release_booking,
+    reopen_reservation,
+    resolve_booking,
+    resolve_client_estimate_response,
+    resolve_job_completion,
+    resolve_reservation,
+    resolve_survey_estimate,
+    save_survey_measurements,
+    ticket_code,
+    update_cost,
+    update_ticket_details,
+    upsert_client,
 )
-from backend.log_context import username_var, verified_client_email_var
 from backend.email_utils import send_manager_alert
 from backend.llm_provider import get_llm
-from backend.company_config import COMPANY_CONTEXT
+from backend.log_context import username_var, verified_client_email_var
+from backend.qa_cache import (
+    approve as qa_approve,
+)
 from backend.qa_cache import (
     get_pending as qa_get_pending,
-    approve as qa_approve,
+)
+from backend.qa_cache import (
     reject as qa_reject,
 )
 from backend.secrets_provider import get_secret
 
+# --- PROJECT IMPORTS ---
+from rag.rag_engine import get_assistant_response
 
 # ============================================================
 # PROJECT PATHS / CONFIG
@@ -345,7 +370,7 @@ def _format_api_error(detail) -> str:
     return str(detail)
 
 
-def _inventory_request(action: str, model: str, quantity: int = 1) -> Tuple[bool, str]:
+def _inventory_request(action: str, model: str, quantity: int = 1) -> tuple[bool, str]:
     """
     Calls the inventory API and returns (ok, message), so callers such as
     approve_reservation_tool branch on success instead of string-matching
@@ -613,7 +638,7 @@ class TravelTimeInput(BaseModel):
     destination: str = Field(
         description="Installation destination address or place name provided by the user."
     )
-    origin: Optional[str] = Field(
+    origin: str | None = Field(
         default=None,
         description=(
             "Optional starting location. If omitted, the configured installer base "
@@ -622,7 +647,7 @@ class TravelTimeInput(BaseModel):
     )
 
 
-def _coordinates_from_env() -> Optional[Tuple[float, float, str]]:
+def _coordinates_from_env() -> tuple[float, float, str] | None:
     if not INSTALLER_BASE_LAT or not INSTALLER_BASE_LON:
         return None
 
@@ -637,7 +662,7 @@ def _coordinates_from_env() -> Optional[Tuple[float, float, str]]:
         return None
 
 
-def _geocode_location(location: str) -> Tuple[float, float, str]:
+def _geocode_location(location: str) -> tuple[float, float, str]:
     """
     Geocodes a location using OpenStreetMap Nominatim.
     """
@@ -737,7 +762,7 @@ def _format_duration(seconds: float) -> str:
     return f"{remaining_minutes} min"
 
 
-def _compute_travel(destination: str, origin: Optional[str] = None) -> dict:
+def _compute_travel(destination: str, origin: str | None = None) -> dict:
     """
     Deterministic core of the travel-time calculation — geocodes origin/
     destination and queries OSRM, returning plain numbers. Used both by
@@ -794,7 +819,7 @@ def _compute_travel(destination: str, origin: Optional[str] = None) -> dict:
 
 
 @tool(args_schema=TravelTimeInput)
-def calculate_travel_time_tool(destination: str, origin: Optional[str] = None) -> str:
+def calculate_travel_time_tool(destination: str, origin: str | None = None) -> str:
     """
     Estimates driving travel time from the configured installer base or a
     provided origin to the installation destination provided by the user.
@@ -844,14 +869,14 @@ def calculate_travel_time_tool(destination: str, origin: Optional[str] = None) -
 
 class BookingFormExtraction(BaseModel):
     """Schema-only helper for parsing free-text/voice input into booking form fields."""
-    client_name: Optional[str] = Field(default=None, description="Full name of the client, if mentioned.")
-    client_address: Optional[str] = Field(default=None, description="Installation address (street and city), if mentioned.")
-    model: Optional[str] = Field(default=None, description="Product model name/code, if mentioned.")
-    quantity: Optional[int] = Field(default=None, description="Number of units, if mentioned.")
-    date_str: Optional[str] = Field(default=None, description="Requested date resolved to YYYY-MM-DD, if mentioned.")
-    time_str: Optional[str] = Field(default=None, description="Requested time in 24-hour HH:MM, if mentioned.")
-    client_email: Optional[str] = Field(default=None, description="Client email address, if mentioned.")
-    client_phone: Optional[str] = Field(default=None, description="Client phone number, if mentioned.")
+    client_name: str | None = Field(default=None, description="Full name of the client, if mentioned.")
+    client_address: str | None = Field(default=None, description="Installation address (street and city), if mentioned.")
+    model: str | None = Field(default=None, description="Product model name/code, if mentioned.")
+    quantity: int | None = Field(default=None, description="Number of units, if mentioned.")
+    date_str: str | None = Field(default=None, description="Requested date resolved to YYYY-MM-DD, if mentioned.")
+    time_str: str | None = Field(default=None, description="Requested time in 24-hour HH:MM, if mentioned.")
+    client_email: str | None = Field(default=None, description="Client email address, if mentioned.")
+    client_phone: str | None = Field(default=None, description="Client phone number, if mentioned.")
 
 
 def extract_booking_fields(raw_text: str) -> dict:
@@ -1814,7 +1839,7 @@ def list_my_installations_tool() -> str:
     return "\n\n".join(parts)
 
 
-def _parse_ticket_reference(ref: str) -> Optional[int]:
+def _parse_ticket_reference(ref: str) -> int | None:
     """Extracts the numeric booking id from a reference like 'TKT-00007' or a bare '7'."""
     match = re.search(r'(\d+)', ref)
     return int(match.group(1)) if match else None
@@ -1842,8 +1867,8 @@ def _format_ticket_details(ticket: dict) -> str:
 
 
 def _summarize_tickets(
-    tickets: list, *, ticket_reference: Optional[str],
-    status_filter: Optional[str], model_filter: Optional[str] = None,
+    tickets: list, *, ticket_reference: str | None,
+    status_filter: str | None, model_filter: str | None = None,
 ) -> str:
     """
     Shared logic for looking up ticket status/details or counts, over whatever
@@ -1889,15 +1914,15 @@ def _summarize_tickets(
 
 
 class TicketQueryInput(BaseModel):
-    ticket_reference: Optional[str] = Field(
+    ticket_reference: str | None = Field(
         default=None,
         description="Specific ticket code like 'TKT-00007', if asking about one particular ticket.",
     )
-    status_filter: Optional[str] = Field(
+    status_filter: str | None = Field(
         default=None,
         description="Filter by ticket status (e.g. 'new', 'closed', 'in_progress'), if asking about a category/count.",
     )
-    model_filter: Optional[str] = Field(
+    model_filter: str | None = Field(
         default=None,
         description="Filter by hardware model/product (e.g. 'IRIS'), if the question is about a specific product. "
                      "Combine freely with status_filter, e.g. 'open IRIS tickets'.",
@@ -1906,8 +1931,8 @@ class TicketQueryInput(BaseModel):
 
 @tool(args_schema=TicketQueryInput)
 def get_ticket_status_tool(
-    ticket_reference: Optional[str] = None, status_filter: Optional[str] = None,
-    model_filter: Optional[str] = None,
+    ticket_reference: str | None = None, status_filter: str | None = None,
+    model_filter: str | None = None,
 ) -> str:
     """
     Looks up ticket status/details across ALL tickets in the system — use this
@@ -1922,8 +1947,8 @@ def get_ticket_status_tool(
 
 @tool(args_schema=TicketQueryInput)
 def get_my_ticket_status_tool(
-    ticket_reference: Optional[str] = None, status_filter: Optional[str] = None,
-    model_filter: Optional[str] = None,
+    ticket_reference: str | None = None, status_filter: str | None = None,
+    model_filter: str | None = None,
 ) -> str:
     """
     Looks up ticket status/details, scoped ONLY to tickets assigned to this
@@ -1941,26 +1966,26 @@ def get_my_ticket_status_tool(
 
 class EditTicketInput(BaseModel):
     ticket_reference: str = Field(description="Ticket code to edit, e.g. 'TKT-00007'.")
-    client_name: Optional[str] = Field(default=None, description="Corrected full name, if changing.")
-    client_email: Optional[str] = Field(default=None, description="Corrected email, if changing.")
-    client_phone: Optional[str] = Field(default=None, description="Corrected phone number, if changing.")
-    client_address: Optional[str] = Field(default=None, description="Corrected site address, if changing.")
-    date_str: Optional[str] = Field(default=None, description="Corrected date (YYYY-MM-DD), if rescheduling.")
-    time_str: Optional[str] = Field(default=None, description="Corrected time (HH:MM), if rescheduling.")
-    quantity: Optional[int] = Field(default=None, description="Corrected quantity, if changing.")
-    notes: Optional[str] = Field(default=None, description="Corrected/updated notes, if changing.")
-    ticket_type: Optional[Literal["door", "window"]] = Field(
+    client_name: str | None = Field(default=None, description="Corrected full name, if changing.")
+    client_email: str | None = Field(default=None, description="Corrected email, if changing.")
+    client_phone: str | None = Field(default=None, description="Corrected phone number, if changing.")
+    client_address: str | None = Field(default=None, description="Corrected site address, if changing.")
+    date_str: str | None = Field(default=None, description="Corrected date (YYYY-MM-DD), if rescheduling.")
+    time_str: str | None = Field(default=None, description="Corrected time (HH:MM), if rescheduling.")
+    quantity: int | None = Field(default=None, description="Corrected quantity, if changing.")
+    notes: str | None = Field(default=None, description="Corrected/updated notes, if changing.")
+    ticket_type: Literal["door", "window"] | None = Field(
         default=None, description="Corrected product type (door or window), if it was tagged wrong."
     )
 
 
 @tool(args_schema=EditTicketInput)
 def edit_ticket_tool(
-    ticket_reference: str, client_name: Optional[str] = None, client_email: Optional[str] = None,
-    client_phone: Optional[str] = None, client_address: Optional[str] = None,
-    date_str: Optional[str] = None, time_str: Optional[str] = None,
-    quantity: Optional[int] = None, notes: Optional[str] = None,
-    ticket_type: Optional[str] = None,
+    ticket_reference: str, client_name: str | None = None, client_email: str | None = None,
+    client_phone: str | None = None, client_address: str | None = None,
+    date_str: str | None = None, time_str: str | None = None,
+    quantity: int | None = None, notes: str | None = None,
+    ticket_type: str | None = None,
 ) -> str:
     """
     Corrects booking details on an existing ticket — e.g. after a phone call

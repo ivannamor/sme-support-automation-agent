@@ -2,8 +2,10 @@
 
 import sys
 from pathlib import Path
+
 import streamlit as st
 
+# TODO PR 11: drop with the app/ restructure (imports ui_shared as top-level).
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APP_DIR      = Path(__file__).resolve().parents[1]
 for p in (str(PROJECT_ROOT), str(APP_DIR)):
@@ -11,16 +13,30 @@ for p in (str(PROJECT_ROOT), str(APP_DIR)):
         sys.path.insert(0, p)
 
 from ui_shared import (
-    require_auth, get_agent, init_chat_session, t,
-    render_sidebar, render_chat_history,
-    render_hitl_and_input, handle_user_turn,
-    render_page_header, render_ticket_card, ticket_code,
-    render_ticket_map, render_ticket_summary, render_installer_job_briefing,
-    render_column_resize_handle, render_chat_autoscroll,
+    get_agent,
+    handle_user_turn,
+    init_chat_session,
+    render_chat_autoscroll,
+    render_chat_history,
+    render_column_resize_handle,
+    render_hitl_and_input,
+    render_installer_job_briefing,
+    render_page_header,
+    render_sidebar,
+    render_ticket_card,
+    render_ticket_map,
+    render_ticket_summary,
+    require_auth,
+    t,
+    ticket_code,
 )
+
 from backend.database import (
-    get_approved_bookings, claim_booking, release_booking,
-    get_installer_active_booking, decline_booking,
+    claim_booking,
+    decline_booking,
+    get_approved_bookings,
+    get_installer_active_booking,
+    release_booking,
 )
 
 st.set_page_config(page_title="Installer Portal", page_icon=None, layout="wide")
@@ -197,17 +213,16 @@ with panel_col:
 # ═══════════════════════════════════════════════════════════════════════════════
 # LEFT PANEL — CHAT
 # ═══════════════════════════════════════════════════════════════════════════════
-with chat_col:
-    with st.container(key="chat_zone", height="stretch"):
-        st.subheader(t("assistant_label"))
-        render_chat_history(agent)
+with chat_col, st.container(key="chat_zone", height="stretch"):
+    st.subheader(t("assistant_label"))
+    render_chat_history(agent)
 
-        user_prompt = render_hitl_and_input(
-            agent, selected_model,
-            prompt_hint=t("installer_sub"),
-        )
+    user_prompt = render_hitl_and_input(
+        agent, selected_model,
+        prompt_hint=t("installer_sub"),
+    )
 
-        if user_prompt:
-            handle_user_turn(user_prompt, agent, selected_model)
+    if user_prompt:
+        handle_user_turn(user_prompt, agent, selected_model)
 
-        render_chat_autoscroll()
+    render_chat_autoscroll()

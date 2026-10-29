@@ -6,31 +6,42 @@ pages does not bleed conversation history or thread IDs across roles.
 Global state (role, username, ux_lang) stays un-prefixed.
 """
 
+import contextlib
+import datetime
+import logging
 import re
+import shutil
 import sys
 import time
 import uuid
-import shutil
-import logging
-import datetime
 from pathlib import Path
 from urllib.parse import quote as _url_quote
 
-import pandas as pd
 import pydeck as pdk
 import streamlit as st
 import streamlit.components.v1 as components
 
+# TODO PR 11: drop with the app/ restructure.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.assistant import initialize_agent, TurnResult
+from backend.assistant import TurnResult, initialize_agent
 from backend.company_config import COMPANY_CONTEXT
-from backend.llm_provider import OPENROUTER_MODELS, DEFAULT_MODEL, calculate_cost
+from backend.database import (
+    get_config,
+    get_costs,
+    get_inventory,
+    get_product,
+    get_ticket_log,
+    log_usage,
+    set_config,
+    ticket_code,
+)
+from backend.llm_provider import DEFAULT_MODEL, OPENROUTER_MODELS, calculate_cost
 from backend.log_context import username_var, verified_client_email_var
-from backend.qa_cache import submit_for_review as qa_submit, lookup as _cache_lookup
-from backend.database import get_config, set_config, log_usage, get_product, get_inventory, get_ticket_log, get_costs, ticket_code
+from backend.qa_cache import lookup as _cache_lookup
+from backend.qa_cache import submit_for_review as qa_submit
 
 # ── translations ──────────────────────────────────────────────────────────────
 
@@ -694,8 +705,8 @@ def render_installer_job_briefing(active_job: dict) -> None:
         cache_key = _k(f"briefing_{booking_id}_{model}_{lang}")
         if cache_key not in st.session_state:
             try:
-                from tools import _INSTALLATION_COLLECTIONS
                 from rag.rag_engine import get_assistant_response
+                from tools import _INSTALLATION_COLLECTIONS
                 # Phrased around "general procedures... like model X" rather than
                 # "how do I install model X" — the installation manuals are generic
                 # manufacturer procedure guides, not per-SKU documents, so a query
@@ -899,8 +910,8 @@ def render_ticket_map(tickets: list[dict]) -> None:
         if not (t.get("client_lat") and t.get("client_lon")) and t.get("client_address")
     ]
     if missing:
-        from tools import _geocode_location
         from backend.database import update_ticket_coordinates
+        from tools import _geocode_location
         for i, ticket in enumerate(missing):
             if i > 0:
                 time.sleep(1)  # Nominatim usage policy: max ~1 request/second
@@ -994,8 +1005,7 @@ _CONFIRM_WORDS = {
     "confirm", "yes", "ok", "okay", "go", "proceed", "sure", "do", "approve",
     "yep", "yup", "right", "correct", "affirmative",
     # Italian
-    "sì", "si", "conferma", "confermo", "vai", "procedi", "approva", "certo", "ok",
-    "esatto", "perfetto",
+    "sì", "si", "conferma", "confermo", "vai", "procedi", "approva", "certo", "esatto", "perfetto",
     # German
     "ja", "bestätigen", "weiter", "sicher",
     # Spanish
@@ -1007,11 +1017,11 @@ _CANCEL_WORDS = {
     # English
     "cancel", "no", "stop", "abort", "reject", "nope", "nah", "refuse",
     # Italian
-    "annulla", "no", "ferma", "rifiuta",
+    "annulla", "ferma", "rifiuta",
     # German
     "nein", "abbrechen", "stopp",
     # Spanish
-    "cancelar", "no", "rechazar",
+    "cancelar", "rechazar",
     # Slovenian
     "ne", "prekliči",
 }
@@ -1426,10 +1436,8 @@ def render_booking_form(agent, selected_model: str) -> None:
                 if candidate in model_options:
                     st.session_state[_k("booking_form_model")] = candidate
             if extracted.get("quantity"):
-                try:
+                with contextlib.suppress(TypeError, ValueError):
                     st.session_state[_k("booking_form_quantity")] = max(1, int(extracted["quantity"]))
-                except (TypeError, ValueError):
-                    pass
             if extracted.get("date_str"):
                 try:
                     d = datetime.datetime.strptime(str(extracted["date_str"]), "%Y-%m-%d").date()
@@ -1875,7 +1883,7 @@ def _save_assistant_turn(result: TurnResult, raw_text: str, selected_model: str,
     _set("last_query_cost", cost)
     _set("total_tokens",    _get("total_tokens", 0) + usage.get("total_tokens", 0))
 
-    try:
+    with contextlib.suppress(Exception):
         log_usage(
             role=st.session_state.get("role", "unknown"),
             model=selected_model,
@@ -1883,8 +1891,6 @@ def _save_assistant_turn(result: TurnResult, raw_text: str, selected_model: str,
             output_tokens=usage.get("output_tokens", 0),
             cost_usd=cost,
         )
-    except Exception:
-        pass
 
     is_general_llm = any(tc.get("tool") == "general_door_knowledge_tool" for tc in captured_tools)
     is_cache_hit   = any("CACHE_HIT" in str(tc.get("output", "")) for tc in captured_tools)
@@ -1937,15 +1943,13 @@ def _save_assistant_turn(result: TurnResult, raw_text: str, selected_model: str,
                 audio_store[new_msg_idx] = audio_bytes
                 _set("audio_store", audio_store)
                 _set("autoplay_idx", new_msg_idx)
-        except Exception as exc:
+        except Exception:
             st.caption(t("audio_error"))
 
     if user_question and not is_cache_hit and _is_cache_eligible(captured_tools):
-        try:
+        with contextlib.suppress(Exception):
             qa_submit(question=user_question, answer=main_answer.strip(),
                       source_role=st.session_state.get("role", "unknown"))
-        except Exception:
-            pass
 
     if captured_tools:
         history = _get("tool_calls_history", [])

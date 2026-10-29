@@ -27,8 +27,8 @@ they're run locally by a developer with their own .env and aren't part of
 the deployed app's runtime footprint.
 """
 
-import os
 import logging
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv

@@ -1,26 +1,19 @@
+import contextlib
 import os
-import sys
 from pathlib import Path
-from typing import List
 
 from dotenv import load_dotenv
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+from llama_parse import LlamaParse
 from pydantic import BaseModel
 
-from llama_parse import LlamaParse
-
-from langchain_core.documents import Document
-from langchain_chroma import Chroma
+from backend.company_config import COMPANY_CONTEXT
+from backend.llm_provider import get_embeddings
 
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from backend.llm_provider import get_embeddings
-from backend.company_config import COMPANY_CONTEXT
-
 DATA_DIR = PROJECT_ROOT / "data"
 DB_DIRECTORY = PROJECT_ROOT / "db" / "company_rag_db"
 
@@ -44,7 +37,7 @@ def parse_pdf_pages(
         "Preserve headings, steps, warnings, numbered lists, measurements, "
         "tools, procedures, troubleshooting notes, and page structure."
     ),
-) -> List[ParsedPage]:
+) -> list[ParsedPage]:
     """
     Parses a PDF page by page using LlamaParse.
     """
@@ -58,7 +51,7 @@ def parse_pdf_pages(
 
     llama_docs = parser.load_data(pdf_path)
 
-    pages: List[ParsedPage] = []
+    pages: list[ParsedPage] = []
     source_name = os.path.basename(pdf_path)
 
     for i, doc in enumerate(llama_docs, start=1):
@@ -79,10 +72,10 @@ def parse_pdf_pages(
 # ============================================================
 
 def split_installation_manual_into_chunks(
-    pages: List[ParsedPage],
+    pages: list[ParsedPage],
     chunk_size: int = 1600,
     doc_type: str = "installation",
-) -> List[Document]:
+) -> list[Document]:
     """
     Splits a manual into page-aligned chunks.
 
@@ -102,8 +95,8 @@ def split_installation_manual_into_chunks(
         raise ValueError("No pages were parsed from the manual.")
 
     label = "Installation Manual" if doc_type == "installation" else "Maintenance Manual"
-    documents: List[Document] = []
-    current_pages: List[ParsedPage] = []
+    documents: list[Document] = []
+    current_pages: list[ParsedPage] = []
     current_length = 0
 
     def flush() -> None:
@@ -155,7 +148,7 @@ def split_installation_manual_into_chunks(
 # ============================================================
 
 def build_installation_manual_collection(
-    pdf_paths: List[str],
+    pdf_paths: list[str],
     db_directory: str = str(DB_DIRECTORY),
     collection_name: str = "installation_guides",
     doc_type: str = "installation",
@@ -177,7 +170,7 @@ def build_installation_manual_collection(
     if not pdf_paths:
         raise ValueError("No PDF files were provided for ingestion.")
 
-    all_chunks: List[Document] = []
+    all_chunks: list[Document] = []
 
     for pdf_path in pdf_paths:
         pages = parse_pdf_pages(pdf_path, parsing_instruction=parsing_instruction)
@@ -199,10 +192,8 @@ def build_installation_manual_collection(
         embedding_function=embeddings,
         collection_name=collection_name,
     )
-    try:
+    with contextlib.suppress(Exception):
         existing_db.delete_collection()
-    except Exception:
-        pass
 
     vector_db = Chroma.from_documents(
         documents=all_chunks,

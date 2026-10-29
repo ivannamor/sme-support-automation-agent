@@ -10,8 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from backend.graph import build_graph, _make_is_mutating, _confirmation_summary
-
+from backend.graph import _confirmation_summary, _make_is_mutating, build_graph
 
 # ── _make_is_mutating ─────────────────────────────────────────────────────────
 

@@ -1,24 +1,19 @@
 import json
-import os
-import re
 import logging
+import re
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple
 
 from dotenv import load_dotenv
-
-from langchain_openai import OpenAIEmbeddings
+from flashrank import Ranker, RerankRequest
 from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import OpenAIEmbeddings
 
-from flashrank import Ranker, RerankRequest
-
-from backend.llm_provider import get_llm, get_embeddings
 from backend.company_config import COMPANY_CONTEXT
-
+from backend.llm_provider import get_embeddings, get_llm
 
 load_dotenv()
 logger = logging.getLogger("RAGEngine")
@@ -52,11 +47,11 @@ PRODUCT_PATTERN = re.compile(
 CATALOGUE_SECTIONS_PATH = PROJECT_ROOT / "sections" / "catalogue" / "catalogue_sections.json"
 
 
-def _load_known_products() -> List[str]:
+def _load_known_products() -> list[str]:
     if not CATALOGUE_SECTIONS_PATH.exists():
         return []
     try:
-        with open(CATALOGUE_SECTIONS_PATH, "r", encoding="utf-8") as file:
+        with open(CATALOGUE_SECTIONS_PATH, encoding="utf-8") as file:
             sections = json.load(file)
     except Exception:
         return []
@@ -68,7 +63,7 @@ def _load_known_products() -> List[str]:
 
 KNOWN_PRODUCTS = _load_known_products()
 
-BM25_CACHE: Dict[str, BM25Retriever] = {}
+BM25_CACHE: dict[str, BM25Retriever] = {}
 
 
 # ============================================================
@@ -85,7 +80,7 @@ def compress_context(context: str) -> str:
     return "\n".join(cleaned_lines)
 
 
-def detect_product(query: str) -> Optional[str]:
+def detect_product(query: str) -> str | None:
     """
     Detects a product code/name in the user query.
     Returns uppercase string for stable comparison.
@@ -112,7 +107,7 @@ def detect_product(query: str) -> Optional[str]:
     return match.group(0).upper()
 
 
-def should_apply_product_filter(product_name: Optional[str]) -> bool:
+def should_apply_product_filter(product_name: str | None) -> bool:
     """
     Decides whether it is safe to use exact Chroma metadata filtering.
 
@@ -162,7 +157,7 @@ _QUERY_FILLER_PREFIXES = [
 _QUERY_LEADING_ARTICLES = ("the ", "la ", "il ", "lo ", "der ", "die ", "das ", "el ", "los ", "las ")
 
 
-def bare_keyword_query(query: str) -> Optional[str]:
+def bare_keyword_query(query: str) -> str | None:
     """
     Strips a leading conversational lead-in (and one leading article) from a
     query, e.g. "tell me about the Vero Legno series" -> "Vero Legno series".
@@ -189,7 +184,7 @@ def bare_keyword_query(query: str) -> Optional[str]:
     return stripped or None
 
 
-def translate_for_retrieval(query: str, llm) -> Optional[str]:
+def translate_for_retrieval(query: str, llm) -> str | None:
     """
     Translates the query into COMPANY_CONTEXT["content_language"] — the
     language the ingested catalogue/manuals are actually written in — for
@@ -221,7 +216,7 @@ def translate_for_retrieval(query: str, llm) -> Optional[str]:
     return translated
 
 
-def get_multi_queries(question: str, llm) -> List[str]:
+def get_multi_queries(question: str, llm) -> list[str]:
     """
     Safe multi-query expansion.
     Does not inject new technical assumptions.
@@ -258,8 +253,8 @@ def get_multi_queries(question: str, llm) -> List[str]:
 
 def route_query_embedding(
     query: str, top_k: int = 3, threshold: float = 0.25,
-    allowed_collections: Optional[List[str]] = None,
-) -> List[str]:
+    allowed_collections: list[str] | None = None,
+) -> list[str]:
     """
     Placeholder fallback semantic routing.
 
@@ -272,7 +267,7 @@ def route_query_embedding(
     return list(COLLECTIONS.values())
 
 
-def route_query_hybrid(query: str, allowed_collections: Optional[List[str]] = None) -> List[str]:
+def route_query_hybrid(query: str, allowed_collections: list[str] | None = None) -> list[str]:
     """
     Hybrid router:
     - Adds collections based on strong keyword signals
@@ -386,8 +381,8 @@ def retrieve_collection(
     collection_name: str,
     embeddings: OpenAIEmbeddings,
     k: int = 5,
-    product_name: Optional[str] = None,
-) -> List[Document]:
+    product_name: str | None = None,
+) -> list[Document]:
     """
     Vector retrieval from one Chroma collection.
 
@@ -428,7 +423,7 @@ def get_bm25_retriever(
     collection_name: str,
     embeddings: OpenAIEmbeddings,
     k: int = 5,
-    product_name: Optional[str] = None,
+    product_name: str | None = None,
 ) -> BM25Retriever:
     """
     Builds or reuses a cached BM25 retriever.
@@ -455,9 +450,9 @@ def get_bm25_retriever(
     metas = data.get("metadatas", [])
 
     if use_product_filter:
-        filtered_pairs: List[Tuple[str, dict]] = []
+        filtered_pairs: list[tuple[str, dict]] = []
 
-        for text, meta in zip(texts, metas):
+        for text, meta in zip(texts, metas, strict=True):
             if meta and str(meta.get("product_name", "")).upper() == product_name.upper():
                 filtered_pairs.append((text, meta))
 
@@ -485,8 +480,8 @@ def bm25_collection(
     collection_name: str,
     embeddings: OpenAIEmbeddings,
     k: int = 5,
-    product_name: Optional[str] = None,
-) -> List[Document]:
+    product_name: str | None = None,
+) -> list[Document]:
     """
     BM25 retrieval from one collection.
 
@@ -526,12 +521,12 @@ def bm25_collection(
 
 def retrieve_all(
     query: str,
-    collections: List[str],
+    collections: list[str],
     embeddings: OpenAIEmbeddings,
     k: int = 5,
     use_bm25: bool = True,
-    product_name: Optional[str] = None,
-) -> List[Document]:
+    product_name: str | None = None,
+) -> list[Document]:
     """
     Retrieves from selected collections using vector retrieval and optional BM25.
 
@@ -569,7 +564,7 @@ def retrieve_all(
 # POST-PROCESSING
 # ============================================================
 
-def deduplicate(docs: List[Document]) -> List[Document]:
+def deduplicate(docs: list[Document]) -> list[Document]:
     """
     Deduplicates retrieved documents across vector/BM25/multi-query results.
     """
@@ -594,7 +589,7 @@ def deduplicate(docs: List[Document]) -> List[Document]:
     return unique
 
 
-def rerank(query: str, docs: List[Document], top_n: int = 8) -> List[Document]:
+def rerank(query: str, docs: list[Document], top_n: int = 8) -> list[Document]:
     """
     Reranks retrieved documents with FlashRank.
     """
@@ -628,7 +623,7 @@ def rerank(query: str, docs: List[Document], top_n: int = 8) -> List[Document]:
     return reranked_docs
 
 
-def format_context(docs: List[Document]) -> str:
+def format_context(docs: list[Document]) -> str:
     """
     Formats retrieved documents for the final LLM prompt.
     """
@@ -666,7 +661,7 @@ def format_context(docs: List[Document]) -> str:
 
 def generate_answer(
     query: str,
-    docs: List[Document],
+    docs: list[Document],
     llm,
 ) -> str:
     """
@@ -751,7 +746,7 @@ def get_assistant_response(
     top_n: int = 8,
     use_bm25: bool = True,
     use_multi_query: bool = True,
-    allowed_collections: Optional[List[str]] = None,
+    allowed_collections: list[str] | None = None,
 ):
     """
     Main RAG entry point.

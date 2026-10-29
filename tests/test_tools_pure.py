@@ -5,16 +5,15 @@ no LLM calls needed for any of these.
 
 import pytest
 
+from backend.database import ticket_code
 from tools import (
-    _parse_ticket_reference,
     _format_duration,
     _format_ticket_details,
+    _parse_ticket_reference,
     _summarize_tickets,
     compute_appointment_duration,
     format_sources,
 )
-from backend.database import ticket_code
-
 
 # ── _parse_ticket_reference ───────────────────────────────────────────────────
 

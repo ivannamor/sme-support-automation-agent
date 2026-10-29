@@ -7,7 +7,6 @@ inventory reservation flow. Every test uses the isolated `test_db` fixture
 
 from backend import database as db
 
-
 # ── schema / migrations ───────────────────────────────────────────────────────
 
 def test_init_db_is_idempotent(test_db):

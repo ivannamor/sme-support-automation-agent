@@ -6,7 +6,6 @@ import time
 import urllib.request
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 API_SERVER_PATH = PROJECT_ROOT / "app" / "api_server.py"
@@ -45,7 +44,6 @@ def wait_for_api(process: subprocess.Popen) -> bool:
 
 
 def start_services():
-    sys.path.insert(0, str(PROJECT_ROOT))
     ensure_inventory_api_key()
 
     print("🚀 Starting Inventory API...")

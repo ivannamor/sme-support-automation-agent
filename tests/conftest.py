@@ -9,15 +9,12 @@ import datetime
 import hashlib
 import math
 import os
-import sys
-from pathlib import Path
-from typing import List
 
 import pytest
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 
 from backend import database
 
@@ -65,10 +62,6 @@ def test_db(tmp_path, monkeypatch):
 
 # ── scripted fake chat model (for backend/graph.py tests) ────────────────────
 
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
-
 
 class ScriptedFakeChatModel(BaseChatModel):
     """
@@ -79,7 +72,7 @@ class ScriptedFakeChatModel(BaseChatModel):
     without calling a real LLM API. bind_tools() is a no-op returning self,
     matching how build_graph() calls llm.bind_tools(tools, parallel_tool_calls=False).
     """
-    responses: List[AIMessage] = []
+    responses: list[AIMessage] = []
 
     def bind_tools(self, tools, **kwargs):
         return self
@@ -95,14 +88,12 @@ class ScriptedFakeChatModel(BaseChatModel):
 
 @pytest.fixture
 def scripted_llm():
-    def _make(responses: List[AIMessage]) -> ScriptedFakeChatModel:
+    def _make(responses: list[AIMessage]) -> ScriptedFakeChatModel:
         return ScriptedFakeChatModel(responses=list(responses))
     return _make
 
 
 # ── deterministic fake embeddings (for backend/qa_cache.py tests) ────────────
-
-from langchain_core.embeddings import Embeddings
 
 
 class FakeEmbeddings(Embeddings):

@@ -6,11 +6,11 @@ each with a short LLM-generated definition grounded in that same content.
 Run once (and again whenever the source PDFs/website content changes
 meaningfully):
 
-    python ingestion/build_glossary_content.py
+    python -m ingestion.build_glossary_content
 
 Then rebuild the glossary Chroma collection with the existing loader:
 
-    python ingestion/build_faq_and_glossary_rag.py
+    python -m ingestion.build_faq_and_glossary_rag
 
 This does NOT re-scrape or re-parse anything — it reads the real chunks
 already sitting in the catalogue_specs/installation_guides/maintenance_guides
@@ -22,23 +22,18 @@ knowledge of doors and windows in general.
 
 import json
 import re
-import sys
 from collections import Counter
 from pathlib import Path
 
 from dotenv import load_dotenv
-
-load_dotenv()
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from langchain_chroma import Chroma
 
 from backend.company_config import COMPANY_CONTEXT
 from backend.llm_provider import get_embeddings, get_llm
 
+load_dotenv()
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DB_DIRECTORY = str(PROJECT_ROOT / "db" / "company_rag_db")
 GLOSSARY_PATH = PROJECT_ROOT / "data" / "glossary" / "glossary.jsonl"
 

@@ -1,12 +1,37 @@
-import os
-from typing import Dict, List
+# Read through secrets_provider, which loads .env on import — COMPANY_CONTEXT
+# is built at import time, so it must not depend on some other module having
+# loaded .env first.
+from typing import TypedDict
+
+from backend.secrets_provider import get_secret
 
 
 def _env(name: str, default: str) -> str:
-    return os.getenv(name, default)
+    return get_secret(name, default)
 
 
-COMPANY_CONTEXT: Dict[str, object] = {
+class CompanyContext(TypedDict):
+    company_name: str
+    company_short_name: str
+    domain_name: str
+    product_family: str
+    product_family_plural: str
+    knowledge_domain: str
+    catalogue_label: str
+    assistant_name: str
+    rag_db_directory_name: str
+    database_file_name: str
+    catalogue_collection_name: str
+    installation_collection_name: str
+    maintenance_collection_name: str
+    faq_collection_name: str
+    glossary_collection_name: str
+    content_language: str
+    product_code_pattern: str
+    product_code_prefixes: list[str]
+
+
+COMPANY_CONTEXT: CompanyContext = {
     "company_name": _env("COMPANY_NAME", "Your Company"),
     "company_short_name": _env("COMPANY_SHORT_NAME", "the company"),
     "domain_name": _env("DOMAIN_NAME", "your company"),
@@ -32,14 +57,13 @@ COMPANY_CONTEXT: Dict[str, object] = {
         "PRODUCT_CODE_PATTERN",
         r"\b[A-Z]{1,6}\d{2,4}(?:[A-Z0-9-]+)*\b",
     ),
+    "product_code_prefixes": [
+        prefix.strip().upper()
+        for prefix in _env("PRODUCT_CODE_PREFIXES", "ABC,XYZ").split(",")
+        if prefix.strip()
+    ],
 }
 
-COMPANY_CONTEXT["product_code_prefixes"] = [
-    prefix.strip().upper()
-    for prefix in _env("PRODUCT_CODE_PREFIXES", "ABC,XYZ").split(",")
-    if prefix.strip()
-]
 
-
-def get_company_context() -> Dict[str, object]:
+def get_company_context() -> CompanyContext:
     return COMPANY_CONTEXT

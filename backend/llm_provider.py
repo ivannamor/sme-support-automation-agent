@@ -5,7 +5,7 @@ This module provides a unified interface for using OpenRouter with LangChain,
 supporting multiple models with easy switching.
 """
 
-from typing import Dict, Optional, Any
+from typing import Any, TypedDict
 
 from backend.secrets_provider import get_secret, require_secret
 
@@ -17,9 +17,17 @@ OPENROUTER_API_KEY = require_secret("OPENROUTER_API_KEY")
 # MODEL CONFIGURATION
 # ============================================================
 
+class ModelInfo(TypedDict):
+    name: str
+    provider: str
+    input_price: float  # $ per 1K tokens
+    output_price: float  # $ per 1K tokens
+    context_window: int
+
+
 # Available models on OpenRouter
 # Format: "owner/model-name"
-OPENROUTER_MODELS = {
+OPENROUTER_MODELS: dict[str, ModelInfo] = {
     "openai/gpt-4o-mini": {
         "name": "GPT-4o Mini",
         "provider": "OpenAI",
@@ -59,7 +67,7 @@ DEFAULT_MODEL = get_secret("OPENROUTER_MODEL", "openai/gpt-4o-mini")
 # ============================================================
 
 def get_llm(
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
     temperature: float = 0,
     max_tokens: int = 700,
     streaming: bool = False,
@@ -79,6 +87,7 @@ def get_llm(
         A LangChain ChatOpenAI instance configured for OpenRouter
     """
     from langchain_openai import ChatOpenAI
+    from pydantic import SecretStr
     
     # Use default if not specified
     if model_name is None:
@@ -97,8 +106,9 @@ def get_llm(
     llm = ChatOpenAI(
         model=model_name,
         temperature=temperature,
-        max_tokens=max_tokens,
-        openai_api_key=OPENROUTER_API_KEY,
+        # Field aliases (max_tokens / openai_api_key), the names the type checker sees.
+        max_completion_tokens=max_tokens,
+        api_key=SecretStr(OPENROUTER_API_KEY),
         base_url="https://openrouter.ai/api/v1",
         streaming=streaming,
         **kwargs
@@ -107,7 +117,7 @@ def get_llm(
     return llm
 
 
-def get_model_info(model_name: Optional[str] = None) -> Dict[str, Any]:
+def get_model_info(model_name: str | None = None) -> ModelInfo:
     """
     Get information about a specific model or the default model.
     

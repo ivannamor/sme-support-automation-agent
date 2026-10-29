@@ -3,8 +3,8 @@ Voice utilities: Speech-to-Text (Whisper) and Text-to-Speech (OpenAI TTS).
 """
 
 import io
-import re
 import logging
+import re
 
 from backend.secrets_provider import get_secret
 

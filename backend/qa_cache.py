@@ -7,14 +7,13 @@ the cache and avoid retriggering the full RAG pipeline.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from langchain_chroma import Chroma
 
-from backend.llm_provider import get_embeddings
 from backend.database import get_connection
+from backend.llm_provider import get_embeddings
 
 logger = logging.getLogger("QACache")
 
@@ -50,7 +49,7 @@ def _approved_cache_hit(question: str) -> bool:
 
 # ── public API ────────────────────────────────────────────────────────────────
 
-def lookup(query: str) -> Optional[str]:
+def lookup(query: str) -> str | None:
     """
     Returns the cached answer if a sufficiently similar question exists,
     or None if the cache has no relevant entry.
@@ -136,7 +135,7 @@ def approve(pending_id: int, approved_by: str = "manager") -> bool:
             metadatas=[{
                 "answer":      answer,
                 "approved_by": approved_by,
-                "approved_at": datetime.now(timezone.utc).isoformat(),
+                "approved_at": datetime.now(UTC).isoformat(),
             }],
         )
     except Exception as exc:

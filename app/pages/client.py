@@ -2,8 +2,10 @@
 
 import sys
 from pathlib import Path
+
 import streamlit as st
 
+# TODO PR 11: drop with the app/ restructure (imports ui_shared as top-level).
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APP_DIR = Path(__file__).resolve().parents[1]
 for p in (str(PROJECT_ROOT), str(APP_DIR)):
@@ -11,12 +13,19 @@ for p in (str(PROJECT_ROOT), str(APP_DIR)):
         sys.path.insert(0, p)
 
 from ui_shared import (
-    require_auth, get_agent, init_chat_session, t,
-    render_sidebar, render_chat_history,
-    render_hitl_and_input, handle_user_turn,
-    render_page_header, render_booking_form,
-    render_client_pending_estimates, render_client_installation_status,
+    get_agent,
+    handle_user_turn,
+    init_chat_session,
+    render_booking_form,
     render_chat_autoscroll,
+    render_chat_history,
+    render_client_installation_status,
+    render_client_pending_estimates,
+    render_hitl_and_input,
+    render_page_header,
+    render_sidebar,
+    require_auth,
+    t,
 )
 
 st.set_page_config(page_title="Client Portal", page_icon=None, layout="wide")

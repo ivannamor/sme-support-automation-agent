@@ -14,15 +14,15 @@ execute immediately without interruption.
 """
 
 import logging
-from typing import Annotated, Callable, Literal, Optional, Union
+from collections.abc import Callable, Mapping
+from typing import Annotated, Any, Literal
 
-from typing_extensions import TypedDict
-
-from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
-from langgraph.graph import StateGraph, START, END
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
+from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
-from langgraph.types import interrupt, Command
+from langgraph.types import Command, interrupt
+from typing_extensions import TypedDict
 
 from backend.database import ticket_code
 
@@ -36,13 +36,13 @@ _DEFAULT_MUTATING_TOOL_NAMES = {"book_installation_tool", "request_site_survey_t
 
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
-    pending_tool_call: Optional[dict]   # tool call waiting for HITL confirmation
+    pending_tool_call: dict | None   # tool call waiting for HITL confirmation
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _make_is_mutating(mutating_tool_names: set[str]):
-    def _is_mutating(tool_call: dict) -> bool:
+    def _is_mutating(tool_call: Mapping[str, Any]) -> bool:
         name = tool_call.get("name", "")
         if name == "inventory_api_tool":
             return tool_call.get("args", {}).get("action") in _MUTATING_INVENTORY_ACTIONS
@@ -50,7 +50,7 @@ def _make_is_mutating(mutating_tool_names: set[str]):
     return _is_mutating
 
 
-def _confirmation_summary(tc: dict) -> str:
+def _confirmation_summary(tc: Mapping[str, Any]) -> str:
     name = tc["name"]
     args = tc.get("args", {})
     if name == "book_installation_tool":
@@ -123,7 +123,7 @@ def _confirmation_summary(tc: dict) -> str:
 def build_graph(
     llm,
     tools: list,
-    system_prompt: Union[str, Callable[[], str]],
+    system_prompt: str | Callable[[], str],
     checkpointer=None,
     mutating_tool_names: set | None = None,
 ):
@@ -182,6 +182,9 @@ def build_graph(
                         ToolMessage and loops back to agent for a natural reply
         """
         last = state["messages"][-1]
+        # Routed here only after the agent emitted a mutating tool call.
+        if not isinstance(last, AIMessage):
+            raise TypeError(f"confirm_node expects an AIMessage, got {type(last).__name__}")
         mutating_tc = next(tc for tc in last.tool_calls if _is_mutating(tc))
 
         decision = interrupt({
@@ -211,6 +214,8 @@ def build_graph(
 
     def execute_confirmed_node(state: AgentState) -> dict:
         tc = state["pending_tool_call"]
+        if tc is None:
+            raise RuntimeError("execute_confirmed reached without a pending tool call")
         tool = tools_by_name[tc["name"]]
         try:
             result = tool.invoke(tc["args"])

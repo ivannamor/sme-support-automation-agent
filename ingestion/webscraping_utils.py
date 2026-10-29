@@ -3,7 +3,6 @@ import types
 import urllib.request
 from html import unescape
 from pathlib import Path
-from typing import List, Optional
 from urllib.parse import urlparse
 
 from langchain_core.documents import Document
@@ -18,7 +17,7 @@ def slug_to_product_name(slug: str) -> str:
     return slug.replace("-", " ").upper()
 
 
-def product_name_from_url(url: str) -> Optional[str]:
+def product_name_from_url(url: str) -> str | None:
     match = PRODUCT_PATH_RE.match(urlparse(url).path)
     return slug_to_product_name(match.group(1)) if match else None
 
@@ -38,7 +37,7 @@ except ImportError:  # pragma: no cover - exercised in minimal environments
     requests = _RequestsCompat()  # type: ignore
 
 
-def load_urls_from_file(urls_path: str | Path) -> List[str]:
+def load_urls_from_file(urls_path: str | Path) -> list[str]:
     path = Path(urls_path)
     urls = []
     for raw_line in path.read_text(encoding="utf-8").splitlines():
@@ -76,8 +75,8 @@ def extract_text_from_html(html: str, url: str) -> str:
     return f"Source URL: {url}\n\n{content}".strip()
 
 
-def build_web_documents(urls: List[str], chunk_size: int = 1600) -> List[Document]:
-    documents: List[Document] = []
+def build_web_documents(urls: list[str], chunk_size: int = 1600) -> list[Document]:
+    documents: list[Document] = []
     for url in urls:
         try:
             html = fetch_url_content(url)

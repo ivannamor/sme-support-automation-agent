@@ -4,9 +4,9 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from ingestion.webscraping_utils import (
+    build_web_documents,
     extract_text_from_html,
     load_urls_from_file,
-    build_web_documents,
 )
 
 

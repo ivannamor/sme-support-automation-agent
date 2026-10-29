@@ -1,40 +1,19 @@
-import sys
-from pathlib import Path
-from typing import List
-
-from dotenv import load_dotenv
-from langchain_core.documents import Document
-from langchain_chroma import Chroma
-
-load_dotenv()
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from backend.llm_provider import get_embeddings
-from ingestion.webscraping_utils import build_web_documents, load_urls_from_file
-
-DATA_DIR = PROJECT_ROOT / "data"
-DB_DIRECTORY = PROJECT_ROOT / "db" / "company_rag_db"
-CATALOGUE_COLLECTION = "catalogue_specs"
-WEBSITE_URLS_PATH = DATA_DIR / "website.txt"
-
 # Web-based catalogue ingestion
 # This script reads product URLs from data/website.txt and stores the scraped content in Chroma.
 
+import contextlib
+from pathlib import Path
 
-load_dotenv()
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+from dotenv import load_dotenv
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
 
 from backend.llm_provider import get_embeddings
 from ingestion.webscraping_utils import build_web_documents, load_urls_from_file
 
+load_dotenv()
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 DB_DIRECTORY = PROJECT_ROOT / "db" / "company_rag_db"
 CATALOGUE_COLLECTION = "catalogue_specs"
@@ -42,7 +21,7 @@ WEBSITE_URLS_PATH = DATA_DIR / "website.txt"
 
 
 def build_chroma_db(
-    chunks: List[Document],
+    chunks: list[Document],
     db_directory: str = str(DB_DIRECTORY),
     collection_name: str = CATALOGUE_COLLECTION,
 ) -> Chroma:
@@ -53,10 +32,8 @@ def build_chroma_db(
         embedding_function=embeddings,
         collection_name=collection_name,
     )
-    try:
+    with contextlib.suppress(Exception):
         existing_db.delete_collection()
-    except Exception:
-        pass
 
     return Chroma.from_documents(
         documents=chunks,
