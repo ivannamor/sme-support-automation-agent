@@ -14,6 +14,7 @@ Pages:
   - pages/manager.py    → manager dashboard + chat
 """
 
+import datetime
 import sys
 from pathlib import Path
 
@@ -24,7 +25,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.database import init_db
+from backend.checkpointing import prune_stale_threads
+from backend.database import init_db, prune_conversation_log
 
 
 @st.cache_resource(show_spinner=False)
@@ -33,7 +35,19 @@ def _init_db_once() -> bool:
     return True
 
 
+# Retention: idle conversation checkpoints (7 days) and archived conversations
+# (365 days) — see "Personal Data & Retention" in the README. The TTL re-runs
+# it on the first page load of each day, so a long-running process keeps
+# deleting expired data, not only at startup.
+@st.cache_resource(show_spinner=False, ttl=datetime.timedelta(days=1))
+def _prune_expired_data_daily() -> bool:
+    prune_stale_threads()
+    prune_conversation_log()
+    return True
+
+
 _init_db_once()
+_prune_expired_data_daily()
 
 pg = st.navigation(
     [

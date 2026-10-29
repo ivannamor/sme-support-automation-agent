@@ -6,11 +6,12 @@ and HITL confirm+cancel.
 """
 
 from langchain.tools import tool
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from backend.graph import _confirmation_summary, _make_is_mutating, build_graph
+from backend.graph import _confirmation_summary, _make_is_mutating, _trim_history, build_graph
 
 # ── _make_is_mutating ─────────────────────────────────────────────────────────
 
@@ -191,3 +192,94 @@ def test_graph_mutating_tool_cancelled_skips_execution(scripted_llm):
     assert any("cancelled by the user" in m.content.lower() for m in tool_messages)
     # The mutating tool itself must never have actually run.
     assert not any("executed with Y" in m.content for m in tool_messages)
+
+
+# ── history trimming ──────────────────────────────────────────────────────────
+
+
+def _turn(n: int, with_tool: bool = False, size: int = 400) -> list:
+    """One conversation turn of roughly `size` characters per message."""
+    text = f"turn {n} " + "x" * size
+    messages = [HumanMessage(content=text)]
+    if with_tool:
+        call_id = f"call_{n}"
+        messages += [
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "_fake_readonly_tool", "args": {"query": "q"}, "id": call_id}],
+            ),
+            ToolMessage(content=text, tool_call_id=call_id),
+        ]
+    messages.append(AIMessage(content=text))
+    return messages
+
+
+def _assert_tool_results_have_their_calls(messages: list) -> None:
+    call_ids = set()
+    for m in messages:
+        if isinstance(m, AIMessage):
+            call_ids |= {tc["id"] for tc in m.tool_calls}
+        if isinstance(m, ToolMessage):
+            assert m.tool_call_id in call_ids, "ToolMessage sent without its tool call"
+
+
+def test_trim_history_keeps_everything_under_budget():
+    messages = _turn(1) + _turn(2, with_tool=True) + [HumanMessage(content="now")]
+    assert _trim_history(messages, max_tokens=100_000) == messages
+
+
+def test_trim_history_drops_oldest_whole_turns():
+    messages = []
+    for n in range(10):
+        messages += _turn(n, with_tool=n % 2 == 0)
+    messages.append(HumanMessage(content="latest question"))
+
+    trimmed = _trim_history(messages, max_tokens=800)
+
+    assert len(trimmed) < len(messages)
+    assert trimmed == messages[-len(trimmed) :]  # a suffix: newest kept, order preserved
+    assert isinstance(trimmed[0], HumanMessage)  # cut only at a turn boundary
+    assert trimmed[-1].content == "latest question"
+    assert count_tokens_approximately(trimmed) <= 800
+    _assert_tool_results_have_their_calls(trimmed)
+
+
+def test_trim_history_never_cuts_the_current_turn():
+    """A tool-heavy current turn over budget is still sent whole, even with no history."""
+    messages = _turn(1) + _turn(2, with_tool=True, size=5000)[:-1]  # turn 2 in progress
+    current = messages[2:]
+
+    assert _trim_history(messages, max_tokens=100) == current
+
+
+def test_trim_history_without_human_messages_is_unchanged():
+    messages = [AIMessage(content="hello")]
+    assert _trim_history(messages, max_tokens=1) == messages
+
+
+def test_graph_sends_trimmed_history_but_keeps_full_state(scripted_llm):
+    seen: list[list] = []
+
+    class RecordingLLM(type(scripted_llm([]))):
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            seen.append(messages)
+            return super()._generate(messages, stop, run_manager, **kwargs)
+
+    responses = [AIMessage(content="reply " + "y" * 400) for _ in range(6)]
+    graph = build_graph(
+        llm=RecordingLLM(responses=responses),
+        tools=_TEST_TOOLS,
+        system_prompt="You are a test assistant.",
+        checkpointer=MemorySaver(),
+        mutating_tool_names=_TEST_MUTATING,
+        max_history_tokens=500,
+    )
+    config = {"configurable": {"thread_id": "trim"}}
+    for n in range(6):
+        graph.invoke({"messages": [HumanMessage(content=f"q{n} " + "x" * 400)]}, config=config)
+
+    last_call = seen[-1]
+    assert isinstance(last_call[0], SystemMessage)
+    assert last_call[-1].content.startswith("q5")
+    assert len(last_call) - 1 < len(graph.get_state(config).values["messages"]) - 1
+    assert len(graph.get_state(config).values["messages"]) == 12  # nothing lost from state
