@@ -17,7 +17,14 @@ import logging
 from collections.abc import Callable, Mapping
 from typing import Annotated, Any, Literal
 
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from langchain_core.messages.utils import count_tokens_approximately, trim_messages
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -123,6 +130,43 @@ def _confirmation_summary(tc: Mapping[str, Any]) -> str:
     return f"Execute **{name}** with args `{args}`?"
 
 
+# ── history trimming ──────────────────────────────────────────────────────────
+
+DEFAULT_MAX_HISTORY_TOKENS = 4000
+
+
+def _trim_history(messages: list[BaseMessage], max_tokens: int) -> list[BaseMessage]:
+    """
+    The messages to send to the LLM: the current turn (from the latest human
+    message on) always in full, plus as many whole earlier turns as fit in
+    `max_tokens`, newest first. The checkpointed state keeps everything.
+
+    Cutting only at human messages keeps every tool call together with its
+    ToolMessage result — the API rejects a tool result whose call was trimmed.
+    """
+    human_indexes = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage)]
+    if not human_indexes:
+        return messages
+    history, current = messages[: human_indexes[-1]], messages[human_indexes[-1] :]
+
+    budget = max_tokens - count_tokens_approximately(current)
+    if budget <= 0 or not history:
+        kept = []
+    else:
+        kept = trim_messages(
+            history,
+            max_tokens=budget,
+            token_counter=count_tokens_approximately,
+            strategy="last",
+            start_on="human",
+        )
+    if len(kept) < len(history):
+        logger.info(
+            f"HISTORY_TRIMMED: sending {len(kept) + len(current)} of {len(messages)} messages"
+        )
+    return kept + current
+
+
 # ── graph factory ─────────────────────────────────────────────────────────────
 
 
@@ -132,6 +176,7 @@ def build_graph(
     system_prompt: str | Callable[[], str],
     checkpointer=None,
     mutating_tool_names: set | None = None,
+    max_history_tokens: int = DEFAULT_MAX_HISTORY_TOKENS,
 ):
     """
     Compiles and returns the assistant StateGraph.
@@ -144,6 +189,9 @@ def build_graph(
                        (for content that changes over time, e.g. today's date).
         checkpointer:  LangGraph checkpointer (MemorySaver, SqliteSaver, …).
                        Required for interrupt()/resume to work.
+        max_history_tokens: Approximate token budget for the conversation
+                       history sent to the LLM (system prompt excluded); see
+                       _trim_history.
     """
     tools_by_name = {t.name: t for t in tools}
     _is_mutating = _make_is_mutating(
@@ -158,7 +206,8 @@ def build_graph(
 
     def agent_node(state: AgentState) -> dict:
         prompt = system_prompt() if callable(system_prompt) else system_prompt
-        messages = [SystemMessage(content=prompt)] + state["messages"]
+        history = _trim_history(state["messages"], max_history_tokens)
+        messages = [SystemMessage(content=prompt), *history]
         response = llm_with_tools.invoke(messages)
         return {"messages": [response]}
 

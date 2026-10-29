@@ -17,6 +17,48 @@ This project's persistence and scheduling are **mocks built for the demo**, not 
 
 What's meant to carry over to a real deployment is the **tool layer's shape**, not its current backend: every mutating action the agent can take — checking availability, booking an appointment, moving inventory, pricing an estimate — is already isolated behind a single function in `tools.py` (e.g. `book_installation_tool`, `inventory_api_tool`, `check_calendar_availability_tool`). Swapping a mock backend for a client's real system means changing the *inside* of that one function, not the agent's prompts, the LangGraph structure, or the HITL confirmation flow around it. The database schema (`backend/database.py`) and calendar calls (`tools.py`'s Google Calendar helpers) are the two places to replace first; everything upstream of them (routing, confirmation, RAG, UI) is designed to keep working unmodified against a different backend as long as the tool functions' return shape doesn't change.
 
+## Personal Data & Retention
+
+> **Read this before deploying with real users.** The assistant stores
+> conversations, and clients routinely type personal data into them (name,
+> email, phone, address). Under the GDPR, personal data may be kept only as
+> long as it is needed for its purpose (*storage limitation*, Art. 5(1)(e)).
+> The retention periods below are **defaults for the demo, not legal
+> advice** — agree the real values with whoever is responsible for data
+> protection in your organisation before going live.
+
+What the app stores about conversations, and for how long:
+
+| Store | What it holds | Who reads it | Kept for | Setting |
+|---|---|---|---|---|
+| `db/checkpoints.db` | The agent's working memory: the full message history of each chat session, incl. tool calls and results | Only the LLM, during that conversation | **7 days** since the session was last used | `CHECKPOINT_RETENTION_DAYS` |
+| `conversation_log` table in `db/company.db` | One row per turn: time, role, user (installer/manager username, the client's *verified* email, or `anonymous`), user message, assistant reply, tools used, model, confirm/cancel decision | People (an archive — never fed back to the LLM) | **365 days** | `CONVERSATION_RETENTION_DAYS` |
+
+Expired data is deleted automatically when the app starts and then once a
+day (on the first page load after 24 hours), see `app/app.py`.
+
+Other places personal data ends up, **not** covered by the automatic deletion:
+
+- **Tickets and clients** (`pending_bookings`, `clients` and related tables) —
+  the business records themselves, kept until deleted by hand.
+- **Log files** (`logs/`) — operational logs; rotated by size (10 MB × 5
+  files), not by age. Error messages can quote user input.
+- **Third-party services**: every message is sent to the LLM provider
+  (OpenRouter, and OpenAI for embeddings/voice). With LangSmith tracing
+  enabled (`LANGCHAIN_TRACING_V2=true`) full conversations are uploaded to
+  LangSmith too — their retention is configured on their side.
+
+**Erasure requests** (Art. 17, right to be forgotten) are not automated yet.
+An archived client's turns can be found by their verified email:
+
+```sql
+DELETE FROM conversation_log WHERE user_identity = 'client@example.com';
+```
+
+Conversations by `anonymous` clients can't be matched to a person this way,
+even though their text may still contain personal data — that is one more
+reason to keep `CONVERSATION_RETENTION_DAYS` no longer than necessary.
+
 ## Example Usage
 
 **Client** — asking about a product, then booking a site survey:
@@ -38,6 +80,7 @@ What's meant to carry over to a real deployment is the **tool layer's shape**, n
   - Glossary (50 terms auto-extracted from the ingested content, each with an LLM-generated definition — see `ingestion/build_glossary_content.py`) and FAQ entries (JSONL).
 - **Hybrid retrieval**: vector similarity + BM25 keyword search + multi-query expansion + FlashRank reranking, with product-name detection so a question about one model doesn't get diluted by chunks from other models. Two extra retrieval candidates are always added alongside the user's own phrasing: a bare-keyword variant (stripping conversational lead-ins like "tell me about") and a translation into the catalogue's actual content language — cross-lingual embedding/lexical matching is measurably weaker than same-language matching, so a question asked in a UI language other than the content's own language still retrieves reliably. Answers cite the source webpage's full URL inline (never a generic "click here"-style link) instead of showing raw retrieved chunks.
 - **Semantic Q&A cache** — near-identical questions are answered from a reviewed cache instead of re-running the full RAG + LLM pipeline; new Q&A pairs go through manager approval before being cached.
+- **Conversation memory** — chat state is checkpointed to SQLite (`backend/checkpointing.py`), shared by every agent, so changing the active model doesn't wipe ongoing conversations or pending confirmations. Only the most recent ~4000 tokens of history (whole turns, never splitting a tool call from its result) are sent to the LLM on each turn, so long chats don't get ever more expensive. Every turn is also archived in a human-readable `conversation_log` table — see "Personal Data & Retention" above.
 - **Human-in-the-loop confirmation** — an explicit LangGraph `interrupt()` pauses the graph for any mutating action (bookings, inventory changes, cost updates, ticket edits) until the user confirms or cancels; read-only actions (search, availability checks, price estimates, ticket lookups) execute immediately. See "Visualizing the Graph" below to inspect the actual node graph.
 - **Ticket lifecycle**: client requests a site survey → manager approves → installer measures on site → manager prices the estimate → client accepts/rejects → installer installs → manager approves the completion report → automatic client emails at every stage. A client can accept/reject a priced estimate either conversationally in chat, or from a small in-portal widget (email lookup, then a couple of clicks) that works even from a brand-new session — no need to remember the original conversation.
 - **Ticket audit log** — every status change on every ticket (created, approved, claimed, measured, priced, accepted, blocked, closed, edited...) is recorded with who and when, visible in a "History" panel on the ticket card.
@@ -70,7 +113,8 @@ app/
 backend/
   assistant.py            Agent orchestration, per-role tool sets (system prompts loaded from prompts/)
   prompts/                 Per-role system prompt templates (shared.txt, client.txt, installer.txt, manager.txt)
-  graph.py                Explicit LangGraph StateGraph with HITL interrupts
+  graph.py                Explicit LangGraph StateGraph with HITL interrupts + history trimming
+  checkpointing.py        Shared SQLite checkpointer (conversation state) + pruning of idle threads
   studio_graphs.py        Entry points for LangGraph Studio (see langgraph.json)
   auth.py                 bcrypt-based installer/manager authentication
   database.py             SQLite schema, inventory seeding, tickets/bookings/alerts/audit log/analytics
@@ -95,7 +139,7 @@ evaluation/
 data/                     Local source data (website.txt, PDFs, glossary — PDFs are gitignored)
 sections/catalogue/       Generated catalogue section map (product name ↔ URL)
 secrets/                  Google OAuth credentials.json / token.json (gitignored)
-db/                       SQLite (company.db) + Chroma vector store (gitignored)
+db/                       SQLite (company.db, checkpoints.db) + Chroma vector store (gitignored)
 tests/                    Pytest test suite (conftest.py fixtures + unit/integration tests)
 tools.py                  LangChain tools exposed to the assistant, per role
 run.py                    Starts the inventory API and Streamlit UI together
@@ -149,6 +193,10 @@ INSTALLER_BASE_LABEL=...
 INSTALLER_BASE_LAT=...
 INSTALLER_BASE_LON=...
 GEOCODING_COUNTRY_CODES=it
+
+# Optional — data retention, in days (see "Personal Data & Retention" above)
+CHECKPOINT_RETENTION_DAYS=7       # agent working memory of idle chat sessions
+CONVERSATION_RETENTION_DAYS=365   # conversation archive (conversation_log)
 
 # Optional — LangSmith tracing
 LANGCHAIN_TRACING_V2=true

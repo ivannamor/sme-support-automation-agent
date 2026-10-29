@@ -10,13 +10,15 @@ from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessageChunk, HumanMessage
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
 
+from backend.checkpointing import get_checkpointer, touch_thread
 from backend.company_config import COMPANY_CONTEXT
+from backend.database import log_conversation_turn
 from backend.graph import build_graph
 from backend.llm_provider import DEFAULT_MODEL, get_llm, get_model_info
-from backend.log_context import request_id_var
+from backend.log_context import request_id_var, username_var, verified_client_email_var
 from backend.secrets_provider import check_required_secrets
 
 # ============================================================
@@ -253,7 +255,9 @@ class DoorAssistantAgent:
 
     One instance is shared by every session of a role/model, so it must stay
     stateless per request: conversation state lives in the checkpointer (keyed
-    by thread_id) and per-turn metadata in the caller's TurnResult.
+    by thread_id) and per-turn metadata in the caller's TurnResult. The
+    checkpointer is shared by all agents too (backend/checkpointing.py), so a
+    thread survives the agent being rebuilt, e.g. when the model changes.
     """
 
     # ── per-role tool sets ────────────────────────────────────────────────────
@@ -334,7 +338,12 @@ class DoorAssistantAgent:
         # approve/reject_survey_estimate_tool deliberately excluded — same reasoning as above.
     }
 
-    def __init__(self, model_name: str | None = None, role: str = "manager"):
+    def __init__(
+        self,
+        model_name: str | None = None,
+        role: str = "manager",
+        checkpointer: BaseCheckpointSaver | None = None,
+    ):
         self.model_name = model_name or DEFAULT_MODEL
         self.role = role
         self.llm = get_llm(
@@ -355,7 +364,7 @@ class DoorAssistantAgent:
         tool_factory = self._ROLE_TOOLS.get(role, self._ROLE_TOOLS["manager"])
         self.tools = tool_factory()
 
-        self.checkpointer = MemorySaver()
+        self.checkpointer = checkpointer or get_checkpointer()
         role_file = role if role in ("client", "installer") else "manager"
         self._shared_template = _load_prompt("shared")
         self._role_template = _load_prompt(role_file)
@@ -439,7 +448,9 @@ class DoorAssistantAgent:
         pending HITL interrupt (if any).
         """
         if not self.is_input_safe(query):
-            yield "⚠️ Security Alert: The input was flagged as unsafe."
+            alert = "⚠️ Security Alert: The input was flagged as unsafe."
+            yield alert
+            self._archive_turn(thread_id, query, alert, [], hitl_decision=None)
             return
 
         yield from self._stream(
@@ -448,6 +459,7 @@ class DoorAssistantAgent:
             result,
             label="STREAM",
             error_text="\n\n❌ Technical issue encountered while generating the response.",
+            user_message=query,
         )
 
     def stream_resume(self, decision: str, thread_id: str, result: TurnResult):
@@ -462,14 +474,30 @@ class DoorAssistantAgent:
             result,
             label=f"RESUME_{decision.upper()}",
             error_text="\n\n❌ Technical issue encountered while resuming.",
+            hitl_decision=decision,
         )
 
-    def _stream(self, graph_input, thread_id: str, result: TurnResult, label: str, error_text: str):
+    def _stream(
+        self,
+        graph_input,
+        thread_id: str,
+        result: TurnResult,
+        label: str,
+        error_text: str,
+        user_message: str = "",
+        hitl_decision: str | None = None,
+    ):
         request_id = str(uuid.uuid4())[:8]
         request_id_var.set(request_id)
         start_time = time.time()
         # Fresh handler per call — a shared one would mix concurrent sessions' data.
         handler = ToolCallCaptureHandler()
+        reply: list[str] = []
+
+        try:
+            touch_thread(thread_id)
+        except Exception as exc:
+            logger.warning(f"THREAD_TOUCH_FAILED: {exc}")
 
         try:
             for chunk, _ in self.executor.stream(
@@ -483,6 +511,7 @@ class DoorAssistantAgent:
                     and chunk.content
                     and not chunk.tool_call_chunks
                 ):
+                    reply.append(chunk.content)
                     yield chunk.content
 
             duration = round(time.time() - start_time, 2)
@@ -492,6 +521,7 @@ class DoorAssistantAgent:
             logger.error(
                 f"[{request_id}] {label}_FAILURE | {type(exc).__name__}: {exc}\n{traceback.format_exc()}"
             )
+            reply.append(error_text)
             yield error_text
 
         finally:
@@ -499,6 +529,41 @@ class DoorAssistantAgent:
             result.usage = handler.get_usage()
             result.run_id = handler.root_run_id
             result.interrupt = self._get_interrupt(thread_id)
+            self._archive_turn(
+                thread_id,
+                user_message,
+                "".join(reply),
+                [tc["tool"] for tc in result.tool_calls],
+                hitl_decision,
+            )
+
+    def _archive_turn(
+        self,
+        thread_id: str,
+        user_message: str,
+        assistant_message: str,
+        tools_used: list[str],
+        hitl_decision: str | None,
+    ) -> None:
+        """Writes the turn to conversation_log. Never breaks the chat if it fails."""
+        if self.role == "client":
+            # Clients have no account: the email they verified, if any.
+            identity = verified_client_email_var.get() or "anonymous"
+        else:
+            identity = username_var.get()
+        try:
+            log_conversation_turn(
+                thread_id=thread_id,
+                role=self.role,
+                user_identity=identity,
+                user_message=user_message,
+                assistant_message=assistant_message,
+                tools_used=tools_used,
+                model=self.model_name,
+                hitl_decision=hitl_decision,
+            )
+        except Exception as exc:
+            logger.warning(f"CONVERSATION_LOG_FAILED: {exc}")
 
     def _get_interrupt(self, thread_id: str) -> dict | None:
         """Returns the first pending interrupt payload, or None."""

@@ -440,3 +440,57 @@ def test_reservation_flow_pending_approve_reject(test_db):
 
     # Resolving an already-resolved reservation again must fail (WHERE status='pending' guard).
     assert not db.resolve_reservation(r1, "approved", "manager1")
+
+
+# ── conversation_log ──────────────────────────────────────────────────────────
+
+
+def _log_turn(user_message: str) -> None:
+    db.log_conversation_turn(
+        thread_id="t1",
+        role="client",
+        user_identity="anonymous",
+        user_message=user_message,
+        assistant_message="reply",
+        tools_used=["search_technical_manuals"],
+        model="openai/gpt-4o-mini",
+    )
+
+
+def _age_turn(user_message: str, days: int) -> None:
+    conn = db.get_connection()
+    conn.execute(
+        "UPDATE conversation_log SET created_at = datetime('now', ?) WHERE user_message = ?",
+        (f"-{days} days", user_message),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _logged_messages() -> list[str]:
+    conn = db.get_connection()
+    rows = conn.execute("SELECT user_message FROM conversation_log ORDER BY id").fetchall()
+    conn.close()
+    return [r["user_message"] for r in rows]
+
+
+def test_prune_conversation_log_deletes_only_expired_turns(test_db):
+    _log_turn("old")
+    _log_turn("recent")
+    _age_turn("old", days=400)
+    _age_turn("recent", days=10)
+
+    assert db.prune_conversation_log(retention_days=365) == 1
+    assert _logged_messages() == ["recent"]
+
+
+def test_prune_conversation_log_reads_retention_days_from_env(test_db, monkeypatch):
+    _log_turn("old")
+    _age_turn("old", days=40)
+
+    monkeypatch.setenv("CONVERSATION_RETENTION_DAYS", "60")
+    assert db.prune_conversation_log() == 0
+
+    monkeypatch.setenv("CONVERSATION_RETENTION_DAYS", "30")
+    assert db.prune_conversation_log() == 1
+    assert _logged_messages() == []

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.company_config import COMPANY_CONTEXT
+from backend.secrets_provider import get_secret
 
 # ============================================================
 # Paths
@@ -13,6 +14,8 @@ from backend.company_config import COMPANY_CONTEXT
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DB_DIR = PROJECT_ROOT / "db"
 DB_PATH = DB_DIR / "company.db"
+
+DEFAULT_CONVERSATION_RETENTION_DAYS = 365
 
 # This is the reviewed section map used by the catalogue RAG ingestion.
 CATALOGUE_SECTIONS_PATH = PROJECT_ROOT / "sections" / "catalogue" / "catalogue_sections.json"
@@ -432,6 +435,33 @@ def init_db(reset: bool = False) -> None:
         """
     )
 
+    # Archive of assistant conversations, one row per turn — a record for
+    # people (never fed back to the LLM). Holds personal data, so rows older
+    # than CONVERSATION_RETENTION_DAYS are deleted (prune_conversation_log).
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS conversation_log (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            thread_id         TEXT NOT NULL,
+            role              TEXT NOT NULL,
+            user_identity     TEXT NOT NULL,
+            user_message      TEXT NOT NULL DEFAULT '',
+            assistant_message TEXT NOT NULL DEFAULT '',
+            tools_used        TEXT NOT NULL DEFAULT '[]',
+            model             TEXT NOT NULL DEFAULT '',
+            hitl_decision     TEXT,
+            created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversation_log_created_at "
+        "ON conversation_log (created_at)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversation_log_thread_id ON conversation_log (thread_id)"
+    )
+
     # Add installation_hours to inventory if it doesn't exist yet.
     existing_cols = [row[1] for row in cursor.execute("PRAGMA table_info(inventory)").fetchall()]
     if "installation_hours" not in existing_cols:
@@ -662,6 +692,63 @@ def log_usage(
     )
     conn.commit()
     conn.close()
+
+
+def log_conversation_turn(
+    thread_id: str,
+    role: str,
+    user_identity: str,
+    user_message: str,
+    assistant_message: str,
+    tools_used: list[str],
+    model: str,
+    hitl_decision: str | None = None,
+) -> None:
+    """
+    Archives one assistant turn. `user_message` is empty for a HITL resume
+    turn, where `hitl_decision` ('confirmed' / 'rejected') says what the user
+    chose instead.
+    """
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO conversation_log
+            (thread_id, role, user_identity, user_message, assistant_message,
+             tools_used, model, hitl_decision)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            thread_id,
+            role,
+            user_identity,
+            user_message,
+            assistant_message,
+            json.dumps(tools_used),
+            model,
+            hitl_decision,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def prune_conversation_log(retention_days: int | None = None) -> int:
+    """
+    Deletes archived turns older than `retention_days` (default:
+    CONVERSATION_RETENTION_DAYS, or 365). Returns how many rows were deleted.
+    """
+    if retention_days is None:
+        retention_days = int(
+            get_secret("CONVERSATION_RETENTION_DAYS", str(DEFAULT_CONVERSATION_RETENTION_DAYS))
+        )
+    conn = get_connection()
+    cursor = conn.execute(
+        "DELETE FROM conversation_log WHERE created_at < datetime('now', ?)",
+        (f"-{retention_days} days",),
+    )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount
 
 
 def get_usage_stats(period: str = "day") -> dict:

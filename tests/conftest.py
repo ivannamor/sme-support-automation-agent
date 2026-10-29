@@ -16,7 +16,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from backend import database
+from backend import checkpointing, database
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -36,6 +36,22 @@ def _disable_tracing():
             os.environ.pop(k, None)
         else:
             os.environ[k] = v
+
+
+@pytest.fixture(autouse=True)
+def _isolate_storage(tmp_path, monkeypatch):
+    """
+    Points both SQLite files at throwaway paths for every test, so no test
+    can reach the real db/company.db or db/checkpoints.db — one that forgets
+    the test_db fixture fails on a missing table instead of silently using
+    dev data.
+    """
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "test_db_not_requested.db")
+    monkeypatch.setattr(checkpointing, "CHECKPOINT_DB_PATH", tmp_path / "checkpoints.db")
+    monkeypatch.setattr(checkpointing, "_saver", None)
+    yield
+    if checkpointing._saver is not None:
+        checkpointing._saver.conn.close()
 
 
 def future_date(days: int = 30) -> str:
