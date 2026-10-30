@@ -277,6 +277,7 @@ def _expand_query(query: str) -> str:
 def search_technical_manuals(query: str) -> str:
     """
     Searches the product catalogue, maintenance/care guidance, FAQs, and glossary.
+    The first choice for door and window questions, even if no product is named.
 
     Use this for:
     - product specifications
@@ -313,7 +314,8 @@ def search_installation_manuals_tool(query: str) -> str:
     procedures). Installer/manager-only — not available to clients.
 
     Use this for installation steps, mounting procedures, tools required,
-    and technical installation troubleshooting.
+    fixing spacing, anchoring, joint filling, installation standards, and
+    technical installation troubleshooting, even if no product is named.
     """
     try:
         answer, docs = get_assistant_response(
@@ -1810,20 +1812,17 @@ Answer:
 
 class GeneralKnowledgeInput(BaseModel):
     question: str = Field(
-        description="A general question about doors, hardware, building systems, or construction materials."
+        description="A question the documentation search could not answer in this turn."
     )
 
 
 @tool(args_schema=GeneralKnowledgeInput)
 def general_door_knowledge_tool(question: str) -> str:
     """
-    Answers general questions about doors, hardware, building systems, and construction
-    using the LLM's broad knowledge — NOT the product documentation.
+    Fallback that answers from the LLM's broad knowledge — NOT the documentation.
 
-    Use this ONLY as a last resort when:
-    - search_technical_manuals returned insufficient information, OR
-    - the question is clearly about general door/building knowledge with no specific
-      product or installation procedure in scope.
+    Use this ONLY after a documentation search in this turn returned insufficient
+    information. Never call it first.
 
     Do NOT use this for product specifications, installation steps, inventory,
     bookings, or anything covered by other tools.
