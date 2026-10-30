@@ -2,8 +2,8 @@
 Tests for rag/rag_engine.py: its pure functions (deduplication, product-name
 detection) and the pipeline's plumbing — one embedding request per search,
 parallel LLM calls still counted — on a throwaway Chroma directory with fake
-embeddings and a fake LLM. Answer *quality* is left to RAGAS-based evaluation
-(evaluation/evaluate_rag.py).
+embeddings and a fake LLM. Answer *quality* is left to the agent evals
+(evaluation/run_evals.py).
 """
 
 import pytest

@@ -1,0 +1,40 @@
+{
+  "anthropic/claude-haiku-5.5": {
+    "agreement": 0.958,
+    "false_yes": 1,
+    "false_no": 0,
+    "unparsed": 0,
+    "cost_usd": 0.00287,
+    "disagreements": [
+      {
+        "id": "c02",
+        "human": false,
+        "judge": true,
+        "reason": "The reply states that the MAGIS 40 hinges are concealed (\"sono a scomparsa\"), which matches the statement, though it doesn't explicitly say this is the default configuration."
+      }
+    ]
+  },
+  "google/gemini-3.8-flash": {
+    "agreement": 0.958,
+    "false_yes": 1,
+    "false_no": 0,
+    "unparsed": 0,
+    "cost_usd": 0.02297,
+    "disagreements": [
+      {
+        "id": "c02",
+        "human": false,
+        "judge": true,
+        "reason": "The reply states that the hinges are concealed (\"a scomparsa\"), confirming they are an inherent feature rather than an optional add-on."
+      }
+    ]
+  },
+  "anthropic/claude-sonnet-5.5": {
+    "agreement": 1.0,
+    "false_yes": 0,
+    "false_no": 0,
+    "unparsed": 0,
+    "cost_usd": 0.03744,
+    "disagreements": []
+  }
+}

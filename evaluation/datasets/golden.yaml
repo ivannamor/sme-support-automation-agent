@@ -1,0 +1,458 @@
+# Golden set for the agent evals (python -m evaluation.run_evals).
+#
+# Every bug found in the app becomes a new case here, so it can't come back
+# unnoticed. Facts must be TRUE IN THE DOCUMENTS: `evidence` quotes the
+# source each fact comes from, so a reviewer can check it without opening
+# the manuals.
+#
+# Two kinds of case:
+#
+#   routing    — only the agent's FIRST decision is run (one LLM call with
+#                the real system prompt and tools; no tool is executed).
+#                expect_tool: the tool that must be called, or "no_tool" for
+#                a plain text reply. Several acceptable decisions: a list.
+#                forbid_tool: tools that must never be called here — the
+#                serious mistakes, reported separately from a wrong choice.
+#                expect_args: arguments that must match (others are free).
+#                facts: optional, checked on the text reply (no_tool only).
+#
+#   knowledge  — the real agent answers end to end (read-only tools only).
+#                expect_sources: documents retrieval must find (any one is
+#                enough), by URL or PDF file name; omitted when the answer
+#                isn't in the documents.
+#                facts: statements the answer must contain (LLM judge).
+#                reference: a short hand-written answer, used by RAGAS.
+#                The answer must also be in the question's `language`.
+
+cases:
+  # ── routing: client ─────────────────────────────────────────────────────────
+
+  - id: route-client-survey-missing-details
+    kind: routing
+    role: client
+    message: "Vorrei un sopralluogo per 3 finestre MINIMAL"
+    # No contact details or date given: booking now would mean inventing them.
+    expect_tool: [no_tool, check_calendar_availability_tool]
+    forbid_tool: [request_site_survey_tool]
+    facts:
+      - "Asks the user for the missing details needed to book (e.g. date, name, email, phone or address)."
+
+  - id: route-client-availability
+    kind: routing
+    role: client
+    message: "Avete disponibilità per un sopralluogo martedì prossimo alle 10?"
+    expect_tool: check_calendar_availability_tool
+
+  - id: route-client-product-question
+    kind: routing
+    role: client
+    message: "What's the Uw value of the ELEGANT window?"
+    expect_tool: search_technical_manuals
+
+  - id: route-client-my-tickets
+    kind: routing
+    role: client
+    message: "Can you check the status of my request? My email is mario.rossi@example.com"
+    expect_tool: find_my_tickets_by_email_tool
+
+  - id: route-client-greeting
+    kind: routing
+    role: client
+    message: "Ciao!"
+    expect_tool: no_tool
+
+  # ── routing: installer ──────────────────────────────────────────────────────
+
+  - id: route-installer-procedure
+    kind: routing
+    role: installer
+    message: "Come si fissa il telaio di un serramento in PVC alla muratura? Che interasse devo rispettare?"
+    expect_tool: search_installation_manuals_tool
+
+  - id: route-installer-my-jobs
+    kind: routing
+    role: installer
+    message: "Quali installazioni ho assegnate?"
+    expect_tool: list_my_installations_tool
+
+  - id: route-installer-complete-job
+    kind: routing
+    role: installer
+    message: "Ho finito il lavoro sul ticket TKT-00012, tutto montato e cliente soddisfatto."
+    # Asking for more notes first is fine too: the report is confirmed by HITL anyway.
+    expect_tool: [complete_job_tool, no_tool]
+    facts:
+      - "Asks for what is needed to file the job completion report (e.g. notes on the work done)."
+
+  - id: route-installer-alert
+    kind: routing
+    role: installer
+    message: "Avvisa il responsabile che il vano del cliente è fuori squadra di 2 cm, non riesco a montare."
+    expect_tool: send_alert_to_manager_tool
+
+  - id: route-installer-travel
+    kind: routing
+    role: installer
+    message: "Quanto ci metto ad arrivare da Udine a Cividale del Friuli?"
+    expect_tool: calculate_travel_time_tool
+
+  # ── routing: manager ────────────────────────────────────────────────────────
+
+  - id: route-manager-stock
+    kind: routing
+    role: manager
+    message: "Quante MAGIS 40 abbiamo in magazzino?"
+    expect_tool: inventory_api_tool
+    expect_args: {action: get, model: MAGIS 40}
+
+  - id: route-manager-reserve
+    kind: routing
+    role: manager
+    message: "Riserva 2 IRIS dal magazzino."
+    expect_tool: inventory_api_tool
+    expect_args: {action: take, model: IRIS, quantity: 2}
+
+  - id: route-manager-pending-bookings
+    kind: routing
+    role: manager
+    message: "Ci sono prenotazioni in attesa di approvazione?"
+    expect_tool: list_pending_bookings_tool
+
+  - id: route-manager-update-cost
+    kind: routing
+    role: manager
+    message: "Porta il costo di trasferta a 0,35 euro al km."
+    expect_tool: update_installation_costs_tool
+    expect_args: {key: travel_cost_per_km, value: 0.35}
+
+  - id: route-manager-ticket-status
+    kind: routing
+    role: manager
+    message: "What's the status of ticket TKT-00007?"
+    expect_tool: get_ticket_status_tool
+
+  # ── knowledge: products ─────────────────────────────────────────────────────
+
+  - id: kb-iris-profile
+    kind: knowledge
+    role: client
+    language: it
+    question: "Di che materiale è il serramento IRIS e quanto è spesso il legno?"
+    expect_sources: ["https://www.marinig.com/prodotto/iris/"]
+    facts:
+      - "IRIS is made of laminated wood (legno lamellare)."
+      - "The laminated-wood core is 80 mm thick."
+    evidence: "iris: «Il cuore del serramento è in legno lamellare con spessore da 80 mm»"
+    reference: "IRIS è un serramento con il cuore in legno lamellare, spesso 80 mm."
+
+  - id: kb-magis-uw
+    kind: knowledge
+    role: client
+    language: en
+    question: "What is the thermal transmittance (Uw) of the MAGIS 40 window?"
+    expect_sources: ["https://www.marinig.com/prodotto/magis-40/"]
+    facts:
+      - "MAGIS 40 has a Uw of 0.64 W/m²K."
+    evidence: "magis-40: «Trasmittanza termica Uw 0,64 w/m²k», calculated on a 1000x1500 mm single-sash window"
+    reference: "The MAGIS 40 reaches a Uw of 0.64 W/m²K (single-sash window, 1000x1500 mm)."
+
+  - id: kb-elegant-material
+    kind: knowledge
+    role: client
+    language: de
+    question: "Aus welchem Material ist das Fenster ELEGANT und wer stellt die Profile her?"
+    expect_sources: ["https://www.marinig.com/prodotto/elegant/"]
+    facts:
+      - "ELEGANT is a PVC window."
+      - "The profiles are made by Deceuninck (a Belgian company)."
+    evidence: "elegant: «profili in pvc di altissima qualità e riciclabili al 100%, realizzati dall'azienda belga Deceuninck»"
+    reference: "ELEGANT ist ein PVC-Fenster; die Profile stammen vom belgischen Hersteller Deceuninck und sind zu 100 % recycelbar."
+
+  - id: kb-magis-sash
+    kind: knowledge
+    role: client
+    language: it
+    question: "Quanto è larga l'anta del MAGIS 40? E le cerniere si vedono?"
+    expect_sources: ["https://www.marinig.com/prodotto/magis-40/"]
+    facts:
+      - "The MAGIS 40 sash is 40 mm wide (front thickness)."
+      - "The hinges are concealed as standard."
+    evidence: "magis-40: «ante con spessore frontale di soli 40mm»; «prevede l'applicazione di cerniere a scomparsa di serie»"
+    reference: "L'anta del MAGIS 40 ha uno spessore frontale di soli 40 mm e le cerniere sono a scomparsa di serie."
+
+  - id: kb-wood-aluminium-range
+    kind: knowledge
+    role: client
+    language: en
+    question: "Which wood-aluminium windows do you offer?"
+    expect_sources:
+      - "https://www.marinig.com/serie-legno-alluminio/"
+      - "https://www.marinig.com/prodotto/easy/"
+      - "https://www.marinig.com/prodotto/minimal/"
+      - "https://www.marinig.com/prodotto/magis-40/"
+    facts:
+      - "Mentions EASY."
+      - "Mentions MINIMAL."
+      - "Mentions MAGIS 40."
+    evidence: "the three product pages are under «Serie Legno / Alluminio» and each lists the other two as «Prodotti della stessa serie»"
+    reference: "The wood-aluminium series includes EASY, MINIMAL and MAGIS 40."
+
+  - id: kb-stilos-use
+    kind: knowledge
+    role: client
+    language: de
+    question: "Für welche Gebäude eignet sich das Fenster STILOS?"
+    expect_sources: ["https://www.marinig.com/prodotto/stilos/"]
+    facts:
+      - "STILOS is meant for historic buildings, villas or period homes."
+    evidence: "stilos: «la soluzione ideale per la riqualificazione di ville e palazzi storici»"
+    reference: "STILOS eignet sich für die Sanierung historischer Gebäude und Villen; sein Design ist von Fenstern des 19. Jahrhunderts inspiriert."
+
+  - id: kb-diamant-security
+    kind: knowledge
+    role: client
+    language: it
+    question: "Che livello antieffrazione ha di serie la ferramenta del DIAMANT?"
+    expect_sources: ["https://www.marinig.com/prodotto/diamant/"]
+    facts:
+      - "It gives burglar-resistance level 2."
+    evidence: "diamant: «ferramenta anta/ribalta MAICO con perni a fungo per un livello antieffrazione 2»"
+    reference: "Il DIAMANT ha di serie ferramenta anta/ribalta MAICO con perni a fungo, per un livello antieffrazione 2."
+
+  - id: kb-easy-glass
+    kind: knowledge
+    role: client
+    language: en
+    question: "How thick can the glass be on the EASY window?"
+    expect_sources: ["https://www.marinig.com/prodotto/easy/"]
+    facts:
+      - "EASY takes glass up to 52 mm thick."
+    evidence: "easy: «la possibilità di montare vetri fino ad uno spessore di 52 mm»"
+    reference: "EASY can take glazing up to 52 mm thick."
+
+  - id: kb-iris-vs-diamant
+    kind: knowledge
+    role: client
+    language: it
+    question: "Che differenza c'è tra IRIS e DIAMANT?"
+    expect_sources: ["https://www.marinig.com/prodotto/iris/", "https://www.marinig.com/prodotto/diamant/"]
+    facts:
+      - "IRIS has soft, linear forms, while DIAMANT reinterprets windows of the 1950s."
+      - "IRIS takes glass up to 42 mm, DIAMANT up to 36 mm."
+    evidence: "iris: «dalle forme lineari e morbide»; diamant: «reinterpreta in chiave moderna i serramenti degli anni Cinquanta»; vetri «fino ad uno spessore di 42 mm» (iris) vs «36 mm» (diamant)"
+    reference: "IRIS e DIAMANT sono entrambi in legno lamellare della serie Verolegno. DIAMANT reinterpreta i serramenti degli anni Cinquanta con un design deciso, IRIS ha forme più morbide; IRIS monta vetri fino a 42 mm, DIAMANT fino a 36 mm."
+
+  - id: kb-best-uw
+    kind: knowledge
+    role: client
+    language: de
+    question: "Welches Ihrer Fenster hat den besten Uw-Wert?"
+    # Hard on purpose: needs the energy values of several product pages.
+    expect_sources: ["https://www.marinig.com/prodotto/magis-40/"]
+    facts:
+      - "MAGIS 40 has the best (lowest) Uw, 0.64 W/m²K."
+    evidence: "Uw per page: MAGIS 40 0,64; ELEGANT 0,68; MINIMAL 0,70; EASY 0,78; IRIS/DIAMANT/STILOS 0,79"
+    reference: "Den besten Uw-Wert hat MAGIS 40 mit 0,64 W/m²K."
+
+  - id: kb-termoblox
+    kind: knowledge
+    role: client
+    language: it
+    question: "Cos'è TERMOBLOX?"
+    expect_sources: ["https://www.marinig.com/controtelai/"]
+    facts:
+      - "TERMOBLOX is a prefabricated insulating sub-frame (controtelaio) system."
+      - "It uses high-density EPS for thermal insulation."
+    evidence: "controtelai: «TERMOBLOX, il sistema di controtelai isolanti prefabbricati»; «EPS ad alta densità per il massimo isolamento termico»"
+    reference: "TERMOBLOX è il sistema di controtelai isolanti prefabbricati su misura, in EPS ad alta densità con pannelli in OSB e senza componenti metallici."
+
+  # ── knowledge: maintenance ──────────────────────────────────────────────────
+
+  - id: kb-maintenance-frequency
+    kind: knowledge
+    role: client
+    language: it
+    question: "Ogni quanto devo controllare i serramenti per la manutenzione?"
+    expect_sources:
+      - "Manuale-Uso-e-Manutenzione-serramenti-pvc.pdf"
+      - "Manuale-Uso-e-Manutenzione-serramenti-legno-e-legno-alluminio.pdf"
+    facts:
+      - "A careful check should be done at least once a year."
+    evidence: "both manuals, Piano di Manutenzione: «almeno una volta l'anno ad un'attenta verifica sullo stato di usura»"
+    reference: "Almeno una volta l'anno va fatta un'attenta verifica dell'usura, in particolare di ferramenta, cerniere e guarnizioni."
+
+  - id: kb-pvc-cleaning
+    kind: knowledge
+    role: client
+    language: en
+    question: "How should I clean PVC window frames?"
+    expect_sources: ["Manuale-Uso-e-Manutenzione-serramenti-pvc.pdf"]
+    facts:
+      - "Clean the PVC profiles with a soft sponge and water (a detergent may be added)."
+      - "Warns against at least one kind of harsh product (aggressive substances, abrasives or solvents)."
+      - "Do not clean the profiles dry (it scratches the PVC)."
+    evidence: "pvc manual: «lavarli con una spugna morbida e dell'acqua, alla quale potete aggiungere eventualmente un detergente»; «Per evitare di rigare il PVC, si consiglia vivamente di non pulire mai i profili a secco»; «Prodotti da evitare: sostanze aggressive, abrasivi, solventi»"
+    reference: "Wash the PVC profiles with a soft sponge and water, optionally adding a detergent; never clean them dry, as that scratches the PVC, and avoid aggressive substances, abrasives or solvents."
+
+  - id: kb-wood-products
+    kind: knowledge
+    role: client
+    language: it
+    question: "Che prodotti consigliate per la manutenzione delle finestre in legno, e quando usarli?"
+    expect_sources: ["RENNER-prodotti-per-manutenzione-del-legno.pdf"]
+    facts:
+      - "Recommends T.Clean (neutral water-based detergent)."
+      - "Recommends T.Top+ (water-based wood reviver)."
+      - "To be used at least once a year, preferably in late spring."
+    evidence: "RENNER: «applicare T.Clean e T.Top+ almeno una volta all'anno, preferibilmente a primavera inoltrata»"
+    reference: "Il kit RENNER T.Top+: detergente neutro T.Clean e ravvivalegno T.Top+, da usare almeno una volta l'anno, preferibilmente a fine primavera (meglio due volte, primavera e autunno)."
+
+  - id: kb-hardware-care
+    kind: knowledge
+    role: client
+    language: de
+    question: "Wie pflege ich die Beschläge meiner Fenster?"
+    expect_sources:
+      - "Manuale-Uso-e-Manutenzione-serramenti-pvc.pdf"
+      - "Manuale-Uso-e-Manutenzione-serramenti-legno-e-legno-alluminio.pdf"
+    facts:
+      - "Grease the moving parts with vaseline or bearing grease."
+      - "Check the mechanical parts and adjust them if needed."
+    evidence: "both manuals: «ingrassare le parti mobili e di chiusura della ferramenta anta con vaselina o grasso per cuscinetti»; «Controllare le parti meccaniche della finestra e, se necessario, regolarle»"
+    reference: "Die beweglichen Teile der Beschläge mit Vaseline oder Lagerfett schmieren und die Mechanik einmal im Jahr prüfen."
+
+  - id: kb-flyscreen-pressure-washer
+    kind: knowledge
+    role: client
+    language: it
+    question: "Posso pulire la zanzariera con l'idropulitrice?"
+    expect_sources:
+      - "Manuale-Uso-e-Manutenzione-serramenti-pvc.pdf"
+      - "Manuale-Uso-e-Manutenzione-serramenti-legno-e-legno-alluminio.pdf"
+    facts:
+      - "No: the fly screen must not be cleaned with a pressure washer."
+    evidence: "both manuals: «non pulire la zanzariera con idropulitrici»"
+    reference: "No, la zanzariera non va pulita con l'idropulitrice: la rete si pulisce solo con acqua e sapone neutro."
+
+  # ── knowledge: installation (installer only) ────────────────────────────────
+
+  - id: kb-fixing-spacing
+    kind: knowledge
+    role: installer
+    language: it
+    question: "Qual è l'interasse massimo tra i fissaggi per una finestra in PVC?"
+    expect_sources: ["manuale-posa-in-opera.pdf"]
+    facts:
+      - "The maximum spacing between fixings is 700 mm."
+    evidence: "manuale-posa-in-opera p37: «Interasse fissaggi per finestre in PVC bianco e colorato max. 700 mm»"
+    reference: "Per finestre in PVC l'interasse massimo tra i fissaggi è 700 mm, a 100–150 mm dall'angolo interno del telaio."
+
+  - id: kb-subframe-anchors
+    kind: knowledge
+    role: installer
+    language: it
+    question: "Con che sistemi si ancora il controtelaio alla muratura?"
+    expect_sources: ["Torggler_Manuale-per-l‘installazione-del-serramento_web.pdf"]
+    facts:
+      - "Mentions metal brackets (zanche metalliche)."
+      - "Mentions wall plugs/anchors (tasselli)."
+      - "Mentions brackets (staffe)."
+    evidence: "Torggler p17: «Di prassi si usano queste tipologie: Zanche metalliche a murare e/o fissare, Tasselli, Staffe»"
+    reference: "Di prassi con zanche metalliche a murare o fissare, tasselli o staffe, ben solidali alla muratura."
+
+  - id: kb-installation-standard
+    kind: knowledge
+    role: installer
+    language: en
+    question: "Which Italian standard covers window installation?"
+    expect_sources: ["Torggler_Manuale-per-l‘installazione-del-serramento_web.pdf"]
+    facts:
+      - "UNI 11673 (posa in opera dei serramenti)."
+    evidence: "Torggler p6: «UNI 11673: Posa in opera dei serramenti»; «UNI 11296-2018: Acustica in edilizia»"
+    reference: "UNI 11673 covers window installation; UNI 11296 covers the acoustic side of façade components."
+
+  - id: kb-joint-filling
+    kind: knowledge
+    role: installer
+    language: it
+    question: "Per l'isolamento acustico del giunto è meglio la schiuma poliuretanica o la lana minerale?"
+    expect_sources: ["Manuale-di-posa-in-opera-Duezeta-Infissi.pdf"]
+    facts:
+      - "Polyurethane foam gives better sound insulation than mineral wool."
+    evidence: "Duezeta p30: «schiuma poliuretanica quale riempimento del giunto permette di aumentare sensibilmente il potere fonoisolante del serramento, rispetto all'utilizzo di lana minerale»"
+    reference: "La schiuma poliuretanica: rispetto alla lana minerale aumenta sensibilmente il potere fonoisolante, grazie alla tenuta maggiore."
+
+  # ── knowledge: edge cases ───────────────────────────────────────────────────
+
+  - id: edge-price
+    kind: knowledge
+    role: client
+    language: it
+    question: "Quanto costa il modello IRIS?"
+    # No prices in the documents: the agent must not invent one.
+    facts:
+      - "Does NOT state a price for IRIS."
+      - "Points to a quote/estimate (e.g. after a site survey) instead."
+    reference: "Il prezzo dipende dalle misure e dalla configurazione: si ottiene un preventivo dopo il sopralluogo."
+
+  - id: edge-thermal-break
+    kind: knowledge
+    role: client
+    language: it
+    question: "Un serramento a taglio termico riduce la dispersione di calore?"
+    # Not in the documents (only the entrance-doors page mentions it): a
+    # general-knowledge answer is right. In July this got an English refusal.
+    facts:
+      - "Says yes, a thermal break reduces heat loss."
+    reference: "Sì: il taglio termico interrompe il ponte termico nel profilo metallico e riduce la dispersione di calore."
+
+  - id: edge-unknown-product
+    kind: knowledge
+    role: client
+    language: en
+    question: "Tell me about your ORION window."
+    facts:
+      - "Says there is no ORION window in the catalogue (or that it has no information on it)."
+      - "Does NOT invent specifications for ORION."
+    reference: "There is no ORION window in the catalogue."
+
+  - id: edge-roof-windows
+    kind: knowledge
+    role: client
+    language: en
+    question: "Do you sell roof windows?"
+    facts:
+      - "Does NOT claim that roof windows are part of the range."
+    reference: "Roof windows are not part of the documented range."
+
+  - id: edge-off-topic
+    kind: knowledge
+    role: client
+    language: it
+    question: "Chi ha vinto i Mondiali di calcio del 2006?"
+    facts:
+      - "Declines or redirects to doors/windows topics instead of answering the football question."
+    reference: "Posso aiutarti solo su porte, finestre e serramenti."
+
+  - id: edge-ug-vs-uw
+    kind: knowledge
+    role: client
+    language: de
+    question: "Was ist der Unterschied zwischen Ug und Uw?"
+    facts:
+      - "Ug refers to the glass (glazing) alone."
+      - "Uw refers to the whole window (frame and glass)."
+    reference: "Ug ist der Wärmedurchgangskoeffizient der Verglasung, Uw der des ganzen Fensters (Rahmen und Glas)."
+
+  - id: edge-conflicting-sources
+    kind: knowledge
+    role: client
+    language: it
+    question: "Quante guarnizioni ha il MAGIS 40?"
+    # The product page contradicts itself: the answer must not pick one silently.
+    expect_sources: ["https://www.marinig.com/prodotto/magis-40/"]
+    facts:
+      - "Points out that the documentation is inconsistent (four gaskets in one place, three in another), or mentions both numbers."
+      - "Does NOT state a single number of gaskets as certain without mentioning the other."
+    evidence: "magis-40: «E Guarnizioni ... troviamo quattro guarnizioni in EPDM» vs «Il profilo MAGIS 40, con tre guarnizioni perimetrali»"
+    reference: "La scheda del MAGIS 40 non è coerente: in un punto parla di quattro guarnizioni in EPDM, in un altro di tre guarnizioni perimetrali. Conviene chiedere conferma al rivenditore."

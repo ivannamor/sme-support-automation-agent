@@ -189,8 +189,8 @@ class FakeEmbeddings(Embeddings):
     into a fixed-size float vector, so identical/near-identical strings
     produce identical/similar vectors without any real API call. Good enough
     for testing Chroma-backed similarity search logic (qa_cache.py), not for
-    testing actual semantic quality (that's what evaluation/evaluate_rag.py
-    with the real embeddings model is for).
+    testing actual semantic quality (that's what the agent evals in
+    evaluation/, with the real embeddings model, are for).
     """
 
     DIMENSIONS = 32
