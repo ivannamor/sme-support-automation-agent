@@ -96,12 +96,6 @@ def get_llm(
     Returns:
         A LangChain ChatOpenAI instance configured for OpenRouter
     """
-    from langchain_openai import ChatOpenAI
-    from pydantic import SecretStr
-
-    # Imported here: usage_tracking imports this module for the price table.
-    from backend.usage_tracking import USAGE_RECORDER
-
     # Use default if not specified
     if model_name is None:
         model_name = DEFAULT_MODEL
@@ -112,10 +106,30 @@ def get_llm(
             f"Unknown model: {model_name}. Available models: {list(OPENROUTER_MODELS.keys())}"
         )
 
-    # Create the LLM with OpenRouter configuration
+    return openrouter_chat_model(model_name, temperature, max_tokens, streaming, **kwargs)
+
+
+def openrouter_chat_model(
+    model_name: str,
+    temperature: float = 0,
+    max_tokens: int = 700,
+    streaming: bool = False,
+    **kwargs,
+) -> Any:
+    """
+    The OpenRouter client behind get_llm, for any OpenRouter model: offline
+    tools such as the eval judge use models the app doesn't offer. Usage is
+    counted like the app's (priced from OpenRouter's reported cost).
+    """
+    from langchain_openai import ChatOpenAI
+    from pydantic import SecretStr
+
+    # Imported here: usage_tracking imports this module for the price table.
+    from backend.usage_tracking import USAGE_RECORDER
+
     # Note: OpenRouter is compatible with OpenAI API, so we use ChatOpenAI
     # with the base_url pointing to OpenRouter
-    llm = ChatOpenAI(
+    return ChatOpenAI(
         model=model_name,
         temperature=temperature,
         # Field aliases (max_tokens / openai_api_key), the names the type checker sees.
@@ -131,8 +145,6 @@ def get_llm(
         max_retries=kwargs.pop("max_retries", MAX_RETRIES),
         **kwargs,
     )
-
-    return llm
 
 
 def get_model_info(model_name: str | None = None) -> ModelInfo:

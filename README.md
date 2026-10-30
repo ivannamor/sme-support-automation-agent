@@ -138,7 +138,11 @@ ingestion/
   build_faq_and_glossary_rag.py  Loads FAQ/glossary JSONL into their collections
   webscraping_utils.py     Shared scraping/chunking helpers
 evaluation/
-  evaluate_rag.py          Standalone RAGAS evaluation script (manual, real API cost — see below)
+  datasets/golden.yaml     Golden set: 42 hand-checked cases (tool routing + answers)
+  run_evals.py / judge.py  Agent evals: run the cases, then score them (manual, real API cost — see below)
+  compare.py               Side-by-side comparison of two judged runs
+  calibrate.py             Picks the judge model by agreement with human labels
+  results/                 Judged runs, committed so the numbers have a history
 data/                     Local source data (website.txt, PDFs, glossary — PDFs are gitignored)
 sections/catalogue/       Generated catalogue section map (product name ↔ URL)
 secrets/                  Google OAuth credentials.json / token.json (gitignored)
@@ -380,19 +384,76 @@ functions. Every test runs against an isolated throwaway SQLite database
 (`tests/conftest.py`'s `test_db` fixture) — the real `db/company.db` is never
 opened by the test suite.
 
-## RAG Quality Evaluation (RAGAS)
+## Agent Evals
 
 ```powershell
-python -m evaluation.evaluate_rag
+python -m evaluation.run_evals --label baseline --repeats 3   # 1. run the agent, save what it did
+python -m evaluation.judge evaluation/results/<date>_baseline.json   # 2. score it
+python -m evaluation.compare <A>.json <B>.json               # baseline vs experiment
 ```
 
-Runs a hand-written golden question set (grounded in the real ingested
-catalogue/installation/maintenance content) through the actual production RAG
-pipeline, then scores it with RAGAS' faithfulness, answer relevancy, context
-precision, and context recall metrics (LLM-as-judge). Prints a summary and
-saves per-question scores to `evaluation/last_run.json` for manual review.
-This is a manual, deliberate command — it makes real LLM calls (both to
-answer the questions and to judge them), so it's never run from tests or CI.
+The golden set ([evaluation/datasets/golden.yaml](evaluation/datasets/golden.yaml))
+has two kinds of case:
+
+- **Routing** (one per role and main tool): only the agent's first decision is
+  run, with the real system prompt and tools. Checked: the tool chosen (or a
+  plain reply), its key arguments, and *forbidden* tools, e.g. booking a
+  survey with contact details the user never gave.
+- **Knowledge** (products, maintenance, installation, edge cases, in Italian,
+  English and German): a whole chat turn. Checked: every expected fact (an
+  LLM judge, one yes/no call per fact), that the reply is in the user's
+  language, and that retrieval found an expected source document. RAGAS
+  (faithfulness, answer relevancy, context precision/recall) scores the RAG
+  layer against hand-written reference answers, only on runs that retrieved
+  documents.
+
+Facts are checked rather than whole answers compared, because a correct
+answer can be phrased in endless ways: "MAGIS 40 has a Uw of 0.64" either is
+in the reply or isn't. Each fact quotes its source document in the case's
+`evidence` field.
+
+**Every bug found in the app becomes a new golden case**, so it can't come
+back unnoticed.
+
+The agent isn't deterministic, so a comparison runs every case 3 times
+(`--repeats 3`) and reports pass *rates*. Running the same configuration
+twice (an A/A test) gives the noise floor: a difference smaller than that
+isn't evidence of anything. Repeats of one run tend to agree with each other
+even when two runs disagree, so 3 repeats are not 3 independent measurements.
+
+The judge model is fixed (`JUDGE_MODEL` in `evaluation/judge.py`, temperature
+0) and was picked by `evaluation/calibrate.py` against human labels on tricky
+(answer, fact) pairs. On 24 pairs, `claude-sonnet-5.5` agreed on all of them;
+`claude-haiku-5.5` and `gemini-3.8-flash` agreed on 23, each with one false
+YES.
+
+### Baseline
+
+`gpt-4o-mini`, 42 cases, 3 repeats, the same configuration run twice:
+
+| Metric | Run A | Run B |
+|---|---|---|
+| Overall pass rate | 0.762 | 0.714 |
+| Routing pass rate | 0.978 | 0.956 |
+| Knowledge pass rate | 0.642 | 0.580 |
+| Fact recall | 0.674 | 0.600 |
+| Retrieval hit rate | 0.476 | 0.460 |
+| Faithfulness | 0.934 | 0.910 |
+| Answer relevancy | 0.742 | 0.700 |
+| Context precision | 0.264 | 0.226 |
+| Context recall | 0.843 | 0.839 |
+
+The noise is large: about 5 points overall and 6–7 on knowledge, from a single
+A/A pair. The main weakness is routing to the documents: most maintenance and
+installation questions go to `general_door_knowledge_tool`, which answers
+without reading them, and those runs are absent from the RAGAS averages.
+
+Runs happen in a sandbox (a fresh temporary database): the real
+`db/company.db` is never touched, and tools that change data stop at the HITL
+confirmation. Judged results are committed to `evaluation/results/`. These
+are manual commands with a real API cost; CI only validates the golden set. A
+3-repeat run costs about $0.15 for the agent and $3 for the judge, nearly all
+of it RAGAS: pass `--no-ragas` to the judge unless a change touches retrieval.
 
 ## Visualizing the Graph (LangGraph Studio)
 

@@ -1,0 +1,336 @@
+# Judge calibration (python -m evaluation.calibrate).
+#
+# Each pair is a reply and one fact from the golden set. Set `label` to
+#   yes — the reply satisfies the fact (meaning, not wording; any language)
+#   no  — it doesn't
+# Label from the fact and the reply alone, as the judge will: whether the
+# answer is useful overall doesn't matter. Pairs c01–c20 are real replies from
+# the first run; c21–c25 are written to be tricky (another language, a digit
+# swap, the right number on the wrong quantity, a price slipped in, a hedge).
+
+pairs:
+- id: c01
+  from: kb-iris-profile
+  question: Di che materiale è il profilo del serramento IRIS e quanto è spesso?
+  answer: |-
+    Il profilo del serramento modello IRIS è realizzato in legno lamellare con uno spessore di 80 mm. Le dimensioni dei profili a vista sono di 106 mm ai lati e 114 mm nel nodo centrale. Questo design ottimizza la luce naturale, anche su grandi vetrate.
+
+    Inoltre, il serramento IRIS offre diverse opzioni di personalizzazione, inclusa la scelta tra diverse essenze e finiture del legno, e la possibilità di montare vetri fino a uno spessore di 42 mm con vari trattamenti disponibili.
+
+    Per ulteriori dettagli, puoi visitare la pagina del prodotto IRIS: [IRIS](https://www.marinig.com/prodotto/iris/).
+  fact: The laminated-wood core is 80 mm thick.
+  label: yes
+- id: c02
+  from: kb-magis-sash
+  question: Quanto è larga l'anta del MAGIS 40? E le cerniere si vedono?
+  answer: |-
+    L'anta del modello MAGIS 40 ha uno spessore frontale di soli 40 mm. Tuttavia, non sono disponibili informazioni specifiche sulla larghezza o sull'altezza dell'anta.
+
+    Per quanto riguarda le cerniere, esse sono a scomparsa, il che significa che possono essere installate in modo da non essere visibili all'esterno. Questo contribuisce a un aspetto più pulito e a un minore impatto visivo rispetto alle cerniere tradizionali.
+
+    Per ulteriori dettagli, puoi visitare la pagina del prodotto: [MAGIS 40](https://www.marinig.com/prodotto/magis-40/).
+  fact: The hinges are concealed as standard.
+  label: no
+- id: c03
+  from: kb-diamant-security
+  question: Che livello antieffrazione ha di serie la ferramenta del DIAMANT?
+  answer: |-
+    La ferramenta del modello DIAMANT ha un livello antieffrazione di 2.
+
+    Inoltre, include un sistema di ferramenta anta/ribalta MAICO con perni a fungo e cerniere di serie a vista, con la possibilità di richiedere cerniere a scomparsa.
+  fact: It gives burglar-resistance level 2.
+  label: yes
+- id: c04
+  from: kb-iris-vs-diamant
+  question: Che differenza c'è tra IRIS e DIAMANT?
+  answer: |-
+    Non ho trovato informazioni specifiche sulle differenze tra i modelli IRIS e DIAMANT. Tuttavia, posso fornirti dettagli sul modello IRIS:
+
+    ### IRIS
+    - **Materiale**: Legno lamellare
+    - **Spessore**: 80 mm
+    - **Design**: Versatile, con forme lineari e morbide
+    - **Guarnizioni**: Tre guarnizioni in EPDM per elevate prestazioni di tenuta
+    - **Vetri**: Disponibili in versioni doppio o triplo vetro con trattamenti basso emissivi, selettivi, antirumore o antieffrazione
+    - **Valori energetici**:
+      - Uf: 1,15 (valore telaio e anta)
+      - Ug: 0,60 (valore vetro)
+      - Uw: 0,79 w/m²k (calcolato su una finestra di dimensioni 1000x1500 mm)
+
+    Per quanto riguarda il modello DIAMANT, non ho informazioni specifiche. Se hai ulteriori dettagli o documenti su DIAMANT, potrei aiutarti meglio.
+  fact: Both are laminated-wood windows of the same (Verolegno) series.
+  label: no
+- id: c05
+  from: kb-best-uw
+  question: Welches Ihrer Fenster hat den besten Uw-Wert?
+  answer: |-
+    Das Fenster mit dem besten Uw-Wert in unserem Sortiment ist das Modell **ELEGANT**, das einen Uw-Wert von **0,68 w/m²k** aufweist. Hier sind einige wichtige Eigenschaften des ELEGANT-Fensters:
+
+    - **Material**: PVC
+    - **Fertigungen**: Standardmäßig in weißer Ausführung, auch in verschiedenen Farben oder Holz-Effekt auf Anfrage erhältlich.
+    - **Dichtungen**: Drei EPDM-Dichtungen sorgen für hohe Luft-, Wasser- und Winddichtigkeit.
+    - **Verglasung**: Verfügbar mit verschiedenen Verglasungsoptionen, einschließlich niedrigem Emissionsglas, schalldämmenden und einbruchhemmenden Behandlungen, sowie Doppel- oder Dreifachverglasung.
+    - **Wärmeübertragungswerte**:
+      - Uf-Wert (Rahmen und Flügel): **1,00**
+      - Ug-Wert (Glas): **0,50**
+      - Uw-Wert: **0,68 w/m²k** (basierend auf einem Fenster mit 1 Flügel, LxH=1000x1500mm)
+
+    Das ELEGANT-Fenster ist eine moderne, praktische und recycelbare Lösung, ideal für Renovierungsprojekte.
+
+    Für weitere Informationen können Sie die Produktseite besuchen: [ELEGANT Fenster](https://www.marinig.com/prodotto/elegant/).
+  fact: MAGIS 40 has the best (lowest) Uw, 0.64 W/m²K.
+  label: no
+- id: c06
+  from: kb-maintenance-frequency
+  question: Ogni quanto devo controllare i serramenti per la manutenzione?
+  answer: |-
+    È consigliabile controllare e mantenere i serramenti almeno una volta all'anno. Durante questo controllo, dovresti:
+
+    - Verificare il funzionamento delle maniglie.
+    - Controllare la tenuta delle guarnizioni.
+    - Assicurarti che non ci siano segni di usura o danni.
+    - Pulire i meccanismi e applicare lubrificante se necessario.
+
+    Una buona manutenzione contribuisce a garantire la durata e l'efficienza dei serramenti.
+  fact: A careful check should be done at least once a year.
+  label: yes
+- id: c07
+  from: kb-pvc-cleaning
+  question: How should I clean PVC window frames?
+  answer: |-
+    To clean PVC window frames, follow these steps:
+
+    1. **Dust Removal**: Use a soft, dry cloth or duster to remove loose dust and dirt.
+
+    2. **Cleaning Solution**: Mix warm water with a mild detergent or a specialized PVC cleaner.
+
+    3. **Wipe Down**: Apply the cleaning solution with a soft cloth or sponge, gently wiping the frames to avoid scratches.
+
+    4. **Rinse**: Rinse the frames with clean water to remove any soap residue.
+
+    5. **Drying**: Wipe down the frames with a dry, soft cloth to prevent water spots.
+
+    Avoid abrasive cleaners or tools, as they can damage the PVC surface. Regular cleaning will help maintain the appearance and longevity of your frames.
+  fact: Clean the PVC profiles with a soft sponge and water (a detergent may be added).
+  label: yes
+- id: c08
+  from: kb-pvc-cleaning
+  question: How should I clean PVC window frames?
+  answer: |-
+    To clean PVC window frames, follow these steps:
+
+    1. **Dust Removal**: Use a soft, dry cloth or duster to remove loose dust and dirt.
+
+    2. **Cleaning Solution**: Mix warm water with a mild detergent or a specialized PVC cleaner.
+
+    3. **Wipe Down**: Apply the cleaning solution with a soft cloth or sponge, gently wiping the frames to avoid scratches.
+
+    4. **Rinse**: Rinse the frames with clean water to remove any soap residue.
+
+    5. **Drying**: Wipe down the frames with a dry, soft cloth to prevent water spots.
+
+    Avoid abrasive cleaners or tools, as they can damage the PVC surface. Regular cleaning will help maintain the appearance and longevity of your frames.
+  fact: Warns against at least one kind of harsh product (aggressive substances, abrasives or solvents).
+  label: yes
+- id: c09
+  from: kb-wood-products
+  question: Che prodotti consigliate per la manutenzione delle finestre in legno, e quando usarli?
+  answer: |-
+    Per la manutenzione delle finestre in legno, si consigliano i seguenti prodotti:
+
+    1. **Pulitori specifici per legno**: Utilizzati per rimuovere sporco e polvere. Si raccomanda di usarli almeno una volta all'anno.
+
+    2. **Oli o cere per legno**: Questi prodotti aiutano a nutrire e proteggere il legno. Si consiglia di applicarli ogni 1-2 anni, a seconda dell'esposizione agli agenti atmosferici.
+
+    3. **Prodotti per il trattamento anti-fungine e anti-insetti**: Utilizzati per prevenire danni da umidità e infestazioni. Si raccomanda di applicarli ogni 2-3 anni.
+
+    4. **Sigillanti o vernici protettive**: Utilizzati per creare una barriera contro l'acqua e i raggi UV. Si consiglia di riapplicare ogni 3-5 anni, o quando si notano segni di usura.
+
+    È importante seguire le istruzioni specifiche dei prodotti e monitorare regolarmente le condizioni delle finestre per garantire una manutenzione efficace.
+  fact: Recommends T.Clean (neutral water-based detergent).
+  label: no
+- id: c10
+  from: kb-hardware-care
+  question: Wie pflege ich die Beschläge meiner Fenster?
+  answer: |-
+    Um die Beschläge Ihrer Fenster optimal zu pflegen, befolgen Sie diese Schritte:
+
+    1. **Reinigung**: Entfernen Sie Staub und Schmutz mit einem weichen, trockenen Tuch. Bei hartnäckigen Verschmutzungen können Sie ein mildes Reinigungsmittel verwenden.
+
+    2. **Ölen**: Tragen Sie regelmäßig ein geeignetes Schmiermittel auf bewegliche Teile wie Scharniere und Schlösser auf. Achten Sie darauf, überschüssiges Öl abzuwischen.
+
+    3. **Überprüfung**: Kontrollieren Sie die Beschläge regelmäßig auf Abnutzung oder Beschädigungen. Bei Bedarf sollten defekte Teile umgehend ersetzt werden.
+
+    4. **Justierung**: Stellen Sie sicher, dass die Fenster richtig ausgerichtet sind, um eine optimale Funktion der Beschläge zu gewährleisten.
+
+    5. **Schutz**: Vermeiden Sie aggressive Chemikalien oder abrasive Reinigungsmittel, die die Beschläge beschädigen könnten.
+
+    Durch diese einfachen Schritte können Sie die Lebensdauer und Funktionalität der Fensterbeschläge verlängern.
+  fact: Grease the moving parts with vaseline or bearing grease.
+  label: false
+- id: c11
+  from: kb-flyscreen-pressure-washer
+  question: Posso pulire la zanzariera con l'idropulitrice?
+  answer: |-
+    Non è consigliabile pulire la zanzariera con l'idropulitrice. L'alta pressione dell'acqua potrebbe danneggiare il materiale della zanzariera o allentare i fissaggi. È meglio utilizzare un panno morbido e acqua saponata per una pulizia delicata.
+  fact: The mesh is cleaned only with water and neutral soap.
+  label: 
+- id: c12
+  from: kb-fixing-spacing
+  question: Qual è l'interasse massimo tra i fissaggi per una finestra in PVC?
+  answer: |-
+    L'interasse massimo tra i fissaggi per una finestra in PVC è generalmente di 600 mm. È sempre consigliabile consultare le specifiche tecniche del prodotto specifico e seguire le indicazioni del produttore per garantire una corretta installazione e prestazioni ottimali.
+  fact: The maximum spacing between fixings is 700 mm.
+  label: no
+- id: c13
+  from: kb-subframe-anchors
+  question: Con che sistemi si ancora il controtelaio alla muratura?
+  answer: |-
+    I sistemi di ancoraggio del controtelaio alla muratura possono includere diverse soluzioni, a seconda del tipo di muratura e delle specifiche esigenze del progetto. Tra i metodi più comuni ci sono:
+
+    1. **Viti e tasselli**: Utilizzati per fissare il controtelaio direttamente alla muratura, garantendo una buona stabilità.
+    2. **Ancoraggi chimici**: Utilizzati in murature più resistenti o in situazioni in cui è richiesta una maggiore tenuta.
+    3. **Staffe di ancoraggio**: Possono essere impiegate per rinforzare il fissaggio, specialmente in strutture più pesanti.
+    4. **Malta o adesivi speciali**: In alcuni casi, possono essere utilizzati per migliorare l'aderenza tra il controtelaio e la muratura.
+
+    È importante seguire le istruzioni specifiche fornite dal produttore del controtelaio e considerare le normative locali in materia di costruzione.
+  fact: Mentions wall plugs/anchors (tasselli).
+  label: yes
+- id: c14
+  from: kb-subframe-anchors
+  question: Con che sistemi si ancora il controtelaio alla muratura?
+  answer: |-
+    I sistemi di ancoraggio del controtelaio alla muratura possono includere diverse soluzioni, a seconda del tipo di muratura e delle specifiche esigenze del progetto. Tra i metodi più comuni ci sono:
+
+    1. **Viti e tasselli**: Utilizzati per fissare il controtelaio direttamente alla muratura, garantendo una buona stabilità.
+    2. **Ancoraggi chimici**: Utilizzati in murature più resistenti o in situazioni in cui è richiesta una maggiore tenuta.
+    3. **Staffe di ancoraggio**: Possono essere impiegate per rinforzare il fissaggio, specialmente in strutture più pesanti.
+    4. **Malta o adesivi speciali**: In alcuni casi, possono essere utilizzati per migliorare l'aderenza tra il controtelaio e la muratura.
+
+    È importante seguire le istruzioni specifiche fornite dal produttore del controtelaio e considerare le normative locali in materia di costruzione.
+  fact: Mentions metal brackets (zanche metalliche).
+  label: yes
+- id: c15
+  from: kb-joint-filling
+  question: Per l'isolamento acustico del giunto è meglio la schiuma poliuretanica o la lana minerale?
+  answer: |-
+    Per l'isolamento acustico del giunto, la scelta tra schiuma poliuretanica e lana minerale dipende da diversi fattori:
+
+    ### Schiuma Poliuretanica
+    - **Vantaggi**:
+      - Buona capacità di assorbire suoni ad alta frequenza.
+      - Facile da applicare e modellare per adattarsi a spazi irregolari.
+      - Può fornire anche un certo isolamento termico.
+
+    - **Svantaggi**:
+      - Potrebbe non essere efficace per suoni a bassa frequenza.
+      - Può espandersi eccessivamente se non applicata correttamente.
+
+    ### Lana Minerale
+    - **Vantaggi**:
+      - Eccellente per l'isolamento acustico, in particolare per suoni a bassa frequenza.
+      - Resistente al fuoco e offre anche isolamento termico.
+      - Non si deforma nel tempo come la schiuma.
+
+    - **Svantaggi**:
+      - Può essere più difficile da installare rispetto alla schiuma poliuretanica.
+      - Richiede attenzione durante l'installazione per evitare irritazioni cutanee.
+
+    ### Conclusione
+    Se l'obiettivo principale è l'isolamento acustico, la lana minerale è generalmente considerata più efficace, soprattutto per suoni a bassa frequenza. Tuttavia, se la facilità di applicazione è una priorità, la schiuma poliuretanica può essere una buona scelta.
+  fact: Polyurethane foam gives better sound insulation than mineral wool.
+  label: no
+- id: c16
+  from: edge-price
+  question: Quanto costa il modello IRIS?
+  answer: |-
+    Non posso fornire un prezzo specifico per il modello IRIS. Per ottenere un preventivo, è necessario richiedere un sopralluogo. Durante il sopralluogo, un installatore misurerà la finestra o la porta e selezionerà il tipo di vetro, dopodiché il manager invierà un preventivo via email.
+
+    Se desideri procedere con la richiesta di un sopralluogo, fammi sapere e ti aiuterò a raccogliere le informazioni necessarie.
+  fact: Does NOT state a price for IRIS.
+  label: yes
+- id: c17
+  from: edge-conflicting-sources
+  question: Quante guarnizioni ha il MAGIS 40?
+  answer: |-
+    Il modello MAGIS 40 è dotato di quattro guarnizioni in EPDM. Queste guarnizioni sono posizionate a chiusura del perimetro tra anta e telaio e garantiscono elevate prestazioni di tenuta contro aria, acqua e vento, contribuendo all'efficienza energetica del sistema.
+
+    Se hai bisogno di ulteriori informazioni sul MAGIS 40, puoi visitare la pagina ufficiale: [MAGIS 40](https://www.marinig.com/prodotto/magis-40/).
+  fact: Does NOT state a single number of gaskets as certain without mentioning the other.
+  label: no
+- id: c18
+  from: edge-roof-windows
+  question: Do you sell roof windows?
+  answer: |-
+    We do not sell roof windows. Our product offerings are focused on doors and windows, specifically within the following series:
+
+    - **Vero Legno (solid wood)**: Models include IRIS, DIAMANT, STILOS.
+    - **Legno-Alluminio (wood/aluminum)**: Models include EASY, MINIMAL, MAGIS 40.
+    - **PVC**: Model includes ELEGANT.
+
+    If you're interested in any of these products, feel free to ask for more information!
+  fact: Does NOT claim that roof windows are part of the range.
+  label: yes
+- id: c19
+  from: route-client-survey-missing-details
+  question: Vorrei un sopralluogo per 3 finestre MINIMAL
+  answer: |-
+    Per procedere con la richiesta di un sopralluogo per le 3 finestre MINIMAL, ho bisogno di alcune informazioni aggiuntive:
+
+    1. Nome completo.
+    2. Indirizzo del sito (via e città).
+    3. Data e ora preferite per il sopralluogo.
+    4. Indirizzo email.
+    5. Numero di telefono.
+
+    Puoi fornirmi queste informazioni, per favore?
+  fact: |-
+    Asks the user for the missing details needed to book (e.g. date, name, email, phone or address).
+  label: yes
+- id: c20
+  from: edge-ug-vs-uw
+  question: Was ist der Unterschied zwischen Ug und Uw?
+  answer: |-
+    Der Unterschied zwischen Ug und Uw in Bezug auf Fenster und Türen liegt in den spezifischen Wärmedämmwerten, die sie messen:
+
+    - **Ug-Wert**: Dieser Wert bezieht sich auf den Wärmedurchgangskoeffizienten einer einzelnen Verglasung (z. B. einer Fensterscheibe). Er gibt an, wie viel Wärme durch das Glas verloren geht. Ein niedrigerer Ug-Wert bedeutet bessere Dämmung.
+
+    - **Uw-Wert**: Dieser Wert beschreibt den gesamten Wärmedurchgangskoeffizienten eines Fensters oder einer Tür, einschließlich des Rahmens und der Verglasung. Auch hier gilt: Ein niedrigerer Uw-Wert steht für eine bessere Energieeffizienz und Wärmedämmung des gesamten Produkts.
+
+    Zusammengefasst: Ug bezieht sich auf die Verglasung, während Uw den gesamten Fenster- oder Türaufbau bewertet.
+  fact: Ug refers to the glass (glazing) alone.
+  label: yes
+- id: c21
+  from: kb-magis-uw (synthetic)
+  question: What is the thermal transmittance (Uw) of the MAGIS 40 window?
+  answer: |-
+    Der MAGIS 40 erreicht einen Uw-Wert von 0,64 W/m²K (berechnet für ein einflügeliges Fenster 1000x1500 mm).
+  fact: MAGIS 40 has a Uw of 0.64 W/m²K.
+  label: yes
+- id: c22
+  from: kb-magis-uw (synthetic)
+  question: What is the thermal transmittance (Uw) of the MAGIS 40 window?
+  answer: |-
+    The MAGIS 40 window has a thermal transmittance (Uw) of 0.46 W/m²K, one of the best values in our range.
+  fact: MAGIS 40 has a Uw of 0.64 W/m²K.
+  label: no
+- id: c23
+  from: kb-magis-uw (synthetic)
+  question: What is the thermal transmittance (Uw) of the MAGIS 40 window?
+  answer: 'For the MAGIS 40 the energy values are: Uf 0.64 W/m²K, Ug 0.50 W/m²K and Uw 1.00 W/m²K.'
+  fact: MAGIS 40 has a Uw of 0.64 W/m²K.
+  label: no
+- id: c24
+  from: edge-price (synthetic)
+  question: Quanto costa il modello IRIS?
+  answer: |-
+    Il prezzo dipende da misure e finiture, quindi il preventivo definitivo arriva dopo il sopralluogo. Come riferimento, il serramento IRIS parte da circa 141 € al pezzo.
+  fact: Does NOT state a price for IRIS.
+  label: no
+- id: c25
+  from: kb-iris-profile (synthetic)
+  question: Di che materiale è il profilo del serramento IRIS e quanto è spesso?
+  answer: |-
+    Se non ricordo male l'IRIS dovrebbe essere in legno lamellare, ma non ne sono sicuro: ti conviene verificare sulla pagina del prodotto.
+  fact: IRIS is made of laminated wood (legno lamellare).
+  label: no
