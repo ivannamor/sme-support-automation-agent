@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from backend import checkpointing, database
+from backend.database import connection
 
 
 def disable_tracing() -> None:
@@ -28,10 +29,10 @@ def disable_tracing() -> None:
 
 @contextmanager
 def sandbox() -> Iterator[Path]:
-    saved = (database.DB_PATH, checkpointing.CHECKPOINT_DB_PATH, checkpointing._saver)
+    saved = (connection.DB_PATH, checkpointing.CHECKPOINT_DB_PATH, checkpointing._saver)
     with tempfile.TemporaryDirectory(prefix="evals_", ignore_cleanup_errors=True) as tmp:
         tmp_dir = Path(tmp)
-        database.DB_PATH = tmp_dir / "company.db"
+        connection.DB_PATH = tmp_dir / "company.db"
         checkpointing.CHECKPOINT_DB_PATH = tmp_dir / "checkpoints.db"
         checkpointing._saver = None
         try:
@@ -41,4 +42,4 @@ def sandbox() -> Iterator[Path]:
         finally:
             if checkpointing._saver is not None:
                 checkpointing._saver.conn.close()
-            database.DB_PATH, checkpointing.CHECKPOINT_DB_PATH, checkpointing._saver = saved
+            connection.DB_PATH, checkpointing.CHECKPOINT_DB_PATH, checkpointing._saver = saved

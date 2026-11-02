@@ -2,11 +2,8 @@
 Smoke test of the real Streamlit pages: each one must open without an exception,
 both empty and with a ticket on the board. Buttons and chat turns aren't covered.
 
-Outbound connections are refused and recorded, so opening a page can never
-reach a paid API, whatever keys the local .env holds.
+The outbound fixture proves that opening a page never tries to reach a paid API.
 """
-
-import socket
 
 import pytest
 import streamlit as st
@@ -21,25 +18,6 @@ PAGES = [
     ("app/pages/installer.py", "installer"),
     ("app/pages/manager.py", "manager"),
 ]
-
-
-@pytest.fixture
-def outbound(monkeypatch):
-    attempts = []
-    connect = socket.socket.connect
-
-    def refuse_outbound(self, address):
-        if self.family in (socket.AF_INET, socket.AF_INET6) and address[0] not in (
-            "127.0.0.1",
-            "::1",
-            "localhost",
-        ):
-            attempts.append(address)
-            raise OSError("no outbound connections in this test")
-        return connect(self, address)
-
-    monkeypatch.setattr(socket.socket, "connect", refuse_outbound)
-    return attempts
 
 
 @pytest.mark.parametrize("with_ticket", [False, True], ids=["empty", "one-ticket"])

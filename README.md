@@ -127,7 +127,7 @@ backend/
   checkpointing.py        Shared SQLite checkpointer (conversation state) + pruning of idle threads
   studio_graphs.py        Entry points for LangGraph Studio (see langgraph.json)
   auth.py                 bcrypt-based installer/manager authentication
-  database.py             SQLite schema, inventory seeding, tickets/bookings/alerts/audit log/analytics
+  database/               SQLite schema and seeding, plus one module per area (tickets, jobs, alerts, inventory, users, clients, settings, activity)
   company_config.py       Company-specific naming/branding, env-overridable
   llm_provider.py         OpenRouter model registry + cost calculation
   usage_tracking.py       Per-call token/cost accounting from provider-reported usage
@@ -392,7 +392,7 @@ rest of the codebase is type-checked too, but only reported, not enforced.
 
 The suite (`tests/conftest.py` + `tests/test_*.py`) covers `backend/graph.py`
 (routing helpers plus full integration tests of all four HITL paths, using a
-scripted fake chat model — no real LLM calls), `backend/database.py` (the
+scripted fake chat model — no real LLM calls), `backend/database/` (the
 entire ticket lifecycle and its audit log, business analytics, reservations),
 `tools.py` (pure helpers plus DB-backed tools with external services
 mocked — geocoding, calendar, email, LLM, inventory API), `backend/qa_cache.py`
