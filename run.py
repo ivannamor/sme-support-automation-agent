@@ -60,7 +60,14 @@ def start_services():
 
     try:
         subprocess.run(
-            ["streamlit", "run", str(STREAMLIT_APP_PATH), "--server.runOnSave=true"],
+            [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                str(STREAMLIT_APP_PATH),
+                "--server.runOnSave=true",
+            ],
             cwd=str(PROJECT_ROOT),
         )
     except KeyboardInterrupt:

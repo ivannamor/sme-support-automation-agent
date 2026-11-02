@@ -60,6 +60,7 @@ from tools import (
     reject_booking_tool,
     reject_survey_estimate_tool,
 )
+from utils.escaping import md_escape, md_no_images
 
 st.set_page_config(page_title="Manager Portal", page_icon=None, layout="wide")
 
@@ -285,18 +286,20 @@ with panel_col:
                                 with st.expander(t("view_alert_expander")):
                                     a = alerts[0]
                                     st.caption(f"{a['sent_by']} — {a['created_at'][:16]}")
-                                    st.markdown(a["structured_message"])
+                                    st.markdown(md_no_images(a["structured_message"]))
 
                         elif ts == "in_review" and phase == "survey":
                             with st.expander(t("view_survey_measurements")):
                                 st.markdown(
                                     f"**{t('dimensions_label')}** {ticket.get('height_cm')}×{ticket.get('width_cm')}×"
                                     f"{ticket.get('depth_cm')} cm  \n"
-                                    f"**{t('glass_type_caption')}** {ticket.get('glass_type')}"
+                                    f"**{t('glass_type_caption')}** {md_escape(ticket.get('glass_type'))}"
                                 )
                                 if ticket.get("survey_notes"):
                                     st.caption(
-                                        t("notes_inline").format(notes=ticket["survey_notes"])
+                                        t("notes_inline").format(
+                                            notes=md_escape(ticket["survey_notes"])
+                                        )
                                     )
 
                             col_a, col_r = st.columns(2)
@@ -330,7 +333,7 @@ with panel_col:
                             job = pending_jobs.get(ticket["id"])
                             if job:
                                 with st.expander(t("view_completion_report")):
-                                    st.markdown(job["structured_report"])
+                                    st.markdown(md_no_images(job["structured_report"]))
 
                                 email_key = f"job_email_{job['id']}"
                                 if email_key not in st.session_state:
@@ -482,12 +485,12 @@ with panel_col:
                 st.info(t("no_clients_yet") if not search.strip() else t("no_clients_match"))
             else:
                 for c in clients:
-                    with st.expander(c["full_name"]):
-                        st.markdown(f"**{t('email_label_bold')}** {c['email']}")
+                    with st.expander(md_escape(c["full_name"])):
+                        st.markdown(f"**{t('email_label_bold')}** {md_escape(c['email'])}")
                         if c.get("phone"):
-                            st.caption(t("phone_label_inline").format(phone=c["phone"]))
+                            st.caption(t("phone_label_inline").format(phone=md_escape(c["phone"])))
                         if c.get("address"):
-                            st.caption(t("address_inline").format(address=c["address"]))
+                            st.caption(t("address_inline").format(address=md_escape(c["address"])))
                         st.caption(t("client_since_label").format(date=c["created_at"][:10]))
 
         # ── alerts ────────────────────────────────────────────────────────────────
@@ -506,8 +509,12 @@ with panel_col:
                                 header += f" | {t('ticket_ref_inline').format(code=ticket_code(alert['booking_id']))}"
                             st.markdown(header)
                             if alert["job_reference"]:
-                                st.caption(t("ref_label_inline").format(ref=alert["job_reference"]))
-                            st.markdown(alert["structured_message"])
+                                st.caption(
+                                    t("ref_label_inline").format(
+                                        ref=md_escape(alert["job_reference"])
+                                    )
+                                )
+                            st.markdown(md_no_images(alert["structured_message"]))
                     if st.button(t("mark_all_read_button"), use_container_width=True):
                         mark_alerts_read([a["id"] for a in unread_alerts])
                         st.rerun()
@@ -520,7 +527,7 @@ with panel_col:
                             cap += f" | {ticket_code(alert['booking_id'])}"
                         st.caption(cap)
                         with st.container(border=True):
-                            st.markdown(alert["structured_message"])
+                            st.markdown(md_no_images(alert["structured_message"]))
 
         # ── QA cache pending ──────────────────────────────────────────────────────
         with tab_qa:
@@ -531,11 +538,11 @@ with panel_col:
                 for item in qa_pending:
                     with st.container(border=True):
                         st.markdown(
-                            f"**{t('qa_question_label').format(role=item['source_role'])}** {item['question']}"
+                            f"**{t('qa_question_label').format(role=item['source_role'])}** {md_escape(item['question'])}"
                         )
                         st.caption(t("submitted_label").format(date=item["created_at"][:10]))
                         with st.expander(t("view_answer_expander")):
-                            st.markdown(item["answer"])
+                            st.markdown(md_no_images(item["answer"]))
                         col_add, col_skip, _ = st.columns([2, 2, 4])
                         with col_add:
                             if st.button(

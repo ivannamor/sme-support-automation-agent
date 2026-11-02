@@ -281,6 +281,15 @@ Or run the two services separately (requires `INVENTORY_API_KEY` in `.env`):
 - Streamlit UI: `http://localhost:8501`
 - Inventory API: `http://127.0.0.1:8000`
 
+### Staff accounts
+
+```powershell
+.venv\Scripts\python.exe -m scripts.create_users                 # creates installer + manager, shows each random password once
+.venv\Scripts\python.exe -m scripts.set_password <username>      # changes a password and lifts a lockout
+```
+
+New passwords need at least 12 characters. The old default password `change-me` is refused at login: accounts that still have it must set a new one first. After 5 failed logins a username is locked for 15 minutes; since the count is per username, anyone can lock an account on purpose for that time.
+
 ## Model Configuration
 
 Models are registered in `backend/llm_provider.py` (OpenRouter):
@@ -477,6 +486,7 @@ deliberately not in `requirements.txt`, same as `pytest`.
 
 ## Notes
 
-- This is a local/demo application (see "Mock Backends vs. Real Integration" above — SQLite + Google Calendar are demo stand-ins, not a hardened production deployment; no authN beyond bcrypt + Streamlit session state).
+- This is a local/demo application (see "Mock Backends vs. Real Integration" above — SQLite + Google Calendar are demo stand-ins, not a hardened production deployment; authN is bcrypt + login lockout + Streamlit session state).
+- User data shown in the UI is escaped (`utils/escaping.py`). Agent chat replies still render as Markdown, so a prompt injection could still put a link or an image in a reply.
 - Travel-time estimates use OpenStreetMap Nominatim (geocoding) and OSRM (routing); traffic conditions are not factored in.
 - `secrets/`, `.env`, `db/`, and `logs/` are gitignored — see `.gitignore` for the full list.
