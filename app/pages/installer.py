@@ -188,7 +188,7 @@ with panel_col:
             if not available:
                 st.info(t("no_jobs_available"))
             else:
-                if already_busy:
+                if active_job is not None:
                     st.warning(
                         t("already_active_job_warning").format(
                             code=ticket_code(active_job["id"]),

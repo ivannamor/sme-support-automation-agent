@@ -380,13 +380,12 @@ pip install -r requirements-dev.txt
 
 ruff check .          # lint
 ruff format .         # format
-mypy                  # type-check backend/
+mypy                  # type-check all application code
 pytest                # tests
 ```
 
 GitHub Actions (`.github/workflows/ci.yml`) runs all four on every push to
-`main` and every pull request. The mypy check on `backend/` is blocking; the
-rest of the codebase is type-checked too, but only reported, not enforced.
+`main` and every pull request, and all of them are blocking.
 
 ## Testing
 

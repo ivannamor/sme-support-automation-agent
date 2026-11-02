@@ -97,14 +97,16 @@ def render_ticket_map(tickets: list[dict]) -> None:
         return (
             f"{ticket_code(ticket['id'])} — {ticket.get('model', '')} ({type_label})<br>"
             f"{ticket.get('client_name') or ticket.get('requested_by', '')}<br>"
-            f"{_TICKET_STATUS_LABEL.get(ticket.get('ticket_status'), ticket.get('ticket_status', ''))}"
+            f"{_TICKET_STATUS_LABEL.get(ticket.get('ticket_status', ''), ticket.get('ticket_status', ''))}"
         )
 
     rows = [
         {
             "lat": ticket["client_lat"],
             "lon": ticket["client_lon"],
-            "color": _hex_to_rgb(_TICKET_STATUS_COLOR.get(ticket.get("ticket_status"), "#6B7280")),
+            "color": _hex_to_rgb(
+                _TICKET_STATUS_COLOR.get(ticket.get("ticket_status", ""), "#6B7280")
+            ),
             "radius": 35 if ticket.get("ticket_phase") == "installation" else 22,
             "label": _map_label(ticket),
         }
