@@ -1,5 +1,13 @@
 # Door & Window AI Assistant
 
+[![CI](https://github.com/ivannamor/sme-support-automation-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ivannamor/sme-support-automation-agent/actions/workflows/ci.yml)
+
+> **Status: active development.** I'm hardening this project towards production quality through a series of small, tested pull requests. The app's automated checks run on every PR, but internals and setup steps may change.
+>
+> **Known limitation: answer quality.** The assistant still misses or gets wrong many technical questions, including some the documentation does answer. On the [evaluation set](#baseline), about 60% of knowledge questions pass. Better retrieval is a planned improvement.
+>
+> **Still to come:** module refactoring, versioned database migrations, dependency and Docker cleanup, and cloud deployment.
+
 A multi-role AI assistant for a windows/doors/accessories business, built with Streamlit, LangChain/LangGraph, OpenRouter, Chroma, and a small FastAPI inventory service. The app itself is company-agnostic (branding is entirely env-driven — see `backend/company_config.py`); this particular deployment's RAG knowledge base is built from **Marinig Serramenti**'s real public catalogue and manuals (`data/website.txt`, `data/installation manuals/`, `data/maintainance manuals/`), so the assistant answers with real product data even though the surrounding app, database, and calendar are demo infrastructure (see "Mock Backends vs. Real Integration" below).
 
 Three portals share one assistant core, each with its own tools, system prompt, and permissions — enforced architecturally (a role's LLM simply cannot call a tool that isn't in its list), not just by prompt instruction:
