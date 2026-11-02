@@ -41,6 +41,7 @@ from backend.llm_provider import DEFAULT_MODEL, OPENROUTER_MODELS
 from backend.log_context import role_var, username_var, verified_client_email_var
 from backend.qa_cache import lookup as _cache_lookup
 from backend.qa_cache import submit_for_review as qa_submit
+from utils.escaping import html_md_escape, md_escape, md_no_images
 
 # ── translations ──────────────────────────────────────────────────────────────
 
@@ -1852,7 +1853,7 @@ def _status_badge(ticket_status: str) -> str:
     label = (
         t(f"status_{ticket_status}")
         if ticket_status in _TICKET_STATUS_LABEL
-        else ticket_status.upper()
+        else html_md_escape(ticket_status.upper())
     )
     color = _TICKET_STATUS_COLOR.get(ticket_status, "#6B7280")
     return (
@@ -1866,7 +1867,7 @@ def _phase_badge(ticket_phase: str) -> str:
     label = (
         t(f"phase_{ticket_phase}")
         if ticket_phase in ("survey", "installation")
-        else ticket_phase.upper()
+        else html_md_escape(ticket_phase.upper())
     )
     return (
         f'<span style="border:1px solid var(--green,#1E4638);color:var(--green,#1E4638);padding:1px 7px;'
@@ -1879,7 +1880,7 @@ def _type_badge(ticket_type: str) -> str:
     label = (
         t(f"ticket_type_{ticket_type}")
         if ticket_type in ("door", "window")
-        else ticket_type.upper()
+        else html_md_escape(ticket_type.upper())
     )
     return (
         f'<span style="border:1px solid var(--amber,#A8712E);color:var(--amber,#A8712E);padding:1px 7px;'
@@ -1926,24 +1927,24 @@ def render_ticket_card(ticket: dict, *, show_stock: bool = True) -> None:
 
     ticket_type = ticket.get("ticket_type", "window")
     st.markdown(
-        f'<span class="mono-accent">{ticket_code(ticket["id"])}</span> — {qty}× **{ticket["model"]}** '
-        f"{ticket['date_str']} {ticket['time_str']} &nbsp; "
+        f'<span class="mono-accent">{ticket_code(ticket["id"])}</span> — {qty}× **{html_md_escape(ticket["model"])}** '
+        f"{html_md_escape(ticket['date_str'])} {html_md_escape(ticket['time_str'])} &nbsp; "
         f"{_type_badge(ticket_type)} {_phase_badge(phase)} {_status_badge(ts)}",
         unsafe_allow_html=True,
     )
 
-    client_line = f"**Client:** {name}"
+    client_line = f"**Client:** {md_escape(name)}"
     email = ticket.get("client_email", "")
     phone = ticket.get("client_phone", "")
     if email:
-        client_line += f"  |  {email}"
+        client_line += f"  |  {md_escape(email)}"
     if phone:
-        client_line += f"  |  {phone}"
+        client_line += f"  |  {md_escape(phone)}"
     st.markdown(client_line)
 
     address = ticket.get("client_address", "")
     if address:
-        st.caption(t("address_inline").format(address=address))
+        st.caption(t("address_inline").format(address=md_escape(address)))
 
     if show_stock:
         product = get_product(ticket["model"])
@@ -1959,7 +1960,7 @@ def render_ticket_card(ticket: dict, *, show_stock: bool = True) -> None:
             f"{ticket['height_cm']:.0f}×{ticket['width_cm']:.0f}×{ticket.get('depth_cm') or 0:.0f}cm</span>"
         )
         if ticket.get("glass_type"):
-            measurements += f' <span style="font-size:0.8rem;color:#3F3F3F;">· {t("glass_type_caption")} {ticket["glass_type"]}</span>'
+            measurements += f' <span style="font-size:0.8rem;color:#3F3F3F;">· {t("glass_type_caption")} {html_md_escape(ticket["glass_type"])}</span>'
         if ticket.get("estimated_price"):
             measurements += (
                 f' <span class="mono-accent" style="font-size:0.8rem;color:#3F3F3F;">'
@@ -1967,11 +1968,11 @@ def render_ticket_card(ticket: dict, *, show_stock: bool = True) -> None:
             )
         st.markdown(measurements, unsafe_allow_html=True)
     if ticket.get("notes"):
-        st.caption(t("notes_inline").format(notes=ticket["notes"]))
+        st.caption(t("notes_inline").format(notes=md_escape(ticket["notes"])))
     if ticket.get("assigned_to"):
         st.caption(
             t("installer_inline").format(
-                installer=ticket["assigned_to"],
+                installer=md_escape(ticket["assigned_to"]),
                 date=(ticket.get("started_at") or "")[:16],
             )
         )
@@ -1982,11 +1983,11 @@ def render_ticket_card(ticket: dict, *, show_stock: bool = True) -> None:
             for entry in log_entries:
                 line = (
                     f"`{entry['created_at'][:16]}` — **{entry['ticket_status'].replace('_', ' ').upper()}** "
-                    f"by {entry['changed_by']}"
+                    f"by {md_escape(entry['changed_by'])}"
                 )
                 st.markdown(line)
                 if entry.get("note"):
-                    st.caption(entry["note"])
+                    st.caption(md_escape(entry["note"]))
 
 
 # ── stat tiles (Usage Analytics) ─────────────────────────────────────────────
@@ -2097,10 +2098,10 @@ def render_installer_job_briefing(active_job: dict) -> None:
     # label rather than being folded into "from the client's request"). ──
     if active_job.get("notes"):
         st.caption(t("briefing_client_request"))
-        st.markdown(f"> {active_job['notes']}")
+        st.markdown(f"> {md_escape(active_job['notes'])}")
     if active_job.get("survey_notes"):
         st.caption(t("briefing_surveyor_note"))
-        st.markdown(f"> {active_job['survey_notes']}")
+        st.markdown(f"> {md_escape(active_job['survey_notes'])}")
 
     # ── installation guidance — installation-phase jobs only. A site
     # survey visit doesn't involve installing anything, so this section
@@ -2134,7 +2135,7 @@ def render_installer_job_briefing(active_job: dict) -> None:
             except Exception as exc:
                 st.session_state[cache_key] = t("briefing_guidance_unavailable").format(error=exc)
 
-        with st.expander(t("briefing_installation_guidance").format(model=model)):
+        with st.expander(t("briefing_installation_guidance").format(model=md_escape(model))):
             st.markdown(st.session_state[cache_key])
 
 
@@ -3222,7 +3223,7 @@ def render_client_pending_estimates() -> None:
         for ticket in tickets:
             with st.container(border=True):
                 st.markdown(
-                    f"**{ticket_code(ticket['id'])}** — {ticket.get('quantity', 1)}× {ticket['model']} "
+                    f"**{ticket_code(ticket['id'])}** — {ticket.get('quantity', 1)}× {md_escape(ticket['model'])} "
                     f"— **€{ticket.get('estimated_price', 0):.2f}**"
                 )
                 st.caption(t("preferred_install_datetime_hint"))
@@ -3327,7 +3328,7 @@ def render_client_installation_status() -> None:
             approved = job["status"] == "approved"
             with st.container(border=True):
                 st.markdown(
-                    f"**{ticket_code(ticket['id'])}** — {ticket.get('quantity', 1)}× {ticket['model']} "
+                    f"**{ticket_code(ticket['id'])}** — {ticket.get('quantity', 1)}× {html_md_escape(ticket['model'])} "
                     f"&nbsp; {_install_outcome_badge(approved)}",
                     unsafe_allow_html=True,
                 )
@@ -3337,7 +3338,7 @@ def render_client_installation_status() -> None:
                     else t("install_outcome_rejected_note")
                 )
                 if job.get("structured_report"):
-                    st.markdown(job["structured_report"])
+                    st.markdown(md_no_images(job["structured_report"]))
 
 
 def _stream_resume(agent, decision: str, selected_model: str):

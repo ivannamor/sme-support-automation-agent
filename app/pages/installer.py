@@ -38,6 +38,7 @@ from backend.database import (
     get_installer_active_booking,
     release_booking,
 )
+from utils.escaping import md_escape
 
 st.set_page_config(page_title="Installer Portal", page_icon=None, layout="wide")
 
@@ -202,8 +203,8 @@ with panel_col:
                     st.warning(
                         t("already_active_job_warning").format(
                             code=ticket_code(active_job["id"]),
-                            model=active_job["model"],
-                            date=active_job["date_str"],
+                            model=md_escape(active_job["model"]),
+                            date=md_escape(active_job["date_str"]),
                         )
                     )
                 for job in available:

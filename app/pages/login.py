@@ -64,14 +64,21 @@ with col_staff:
         if not username or not password:
             st.error("Please enter both username and password.")
         else:
-            role = authenticate(username, password)
-            if role:
-                st.session_state.role = role
+            result = authenticate(username, password)
+            if result.status == "ok":
+                st.session_state.role = result.role
                 st.session_state.username = username
                 target = {
                     "installer": "pages/installer.py",
                     "manager": "pages/manager.py",
-                }.get(role, "pages/manager.py")
+                }.get(result.role, "pages/manager.py")
                 st.switch_page(target)
+            elif result.status == "locked":
+                st.error("Too many failed attempts. Try again in 15 minutes.")
+            elif result.status == "default_password":
+                st.error(
+                    "This account still has the default password. Ask an administrator "
+                    "to set a new one with scripts/set_password."
+                )
             else:
                 st.error("Invalid credentials.")
