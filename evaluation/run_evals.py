@@ -79,7 +79,7 @@ def _doc_record(doc) -> dict:
 def recording_retrieval() -> Iterator[list[dict]]:
     """Records every RAG search the agent's tools make, with the documents it returned."""
     searches: list[dict] = []
-    original = tools.get_assistant_response
+    original = tools.knowledge.get_assistant_response
 
     def recording(*args, **kwargs):
         answer, docs = original(*args, **kwargs)
@@ -87,11 +87,11 @@ def recording_retrieval() -> Iterator[list[dict]]:
         searches.append({"query": query, "docs": [_doc_record(d) for d in docs]})
         return answer, docs
 
-    tools.get_assistant_response = recording
+    tools.knowledge.get_assistant_response = recording
     try:
         yield searches
     finally:
-        tools.get_assistant_response = original
+        tools.knowledge.get_assistant_response = original
 
 
 def run_knowledge(agent: DoorAssistantAgent, case: KnowledgeCase) -> dict:

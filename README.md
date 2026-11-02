@@ -23,7 +23,7 @@ This project's persistence and scheduling are **mocks built for the demo**, not 
 - **Database**: a local SQLite file (`db/company.db`) holds inventory, tickets, clients, users, and cost config. A real deployment would point this at whatever the client already runs (an ERP, a CRM, a proper RDBMS) instead.
 - **Calendar**: Google Calendar via OAuth2 is used for availability checks and bookings, purely because it's a realistic, easy-to-demo stand-in for *some* scheduling system. A real deployment would integrate whatever scheduling/dispatch system the client already uses (which might not be Google Calendar at all).
 
-What's meant to carry over to a real deployment is the **tool layer's shape**, not its current backend: every mutating action the agent can take — checking availability, booking an appointment, moving inventory, pricing an estimate — is already isolated behind a single function in `tools.py` (e.g. `book_installation_tool`, `inventory_api_tool`, `check_calendar_availability_tool`). Swapping a mock backend for a client's real system means changing the *inside* of that one function, not the agent's prompts, the LangGraph structure, or the HITL confirmation flow around it. The database schema (`backend/database.py`) and calendar calls (`tools.py`'s Google Calendar helpers) are the two places to replace first; everything upstream of them (routing, confirmation, RAG, UI) is designed to keep working unmodified against a different backend as long as the tool functions' return shape doesn't change.
+What's meant to carry over to a real deployment is the **tool layer's shape**, not its current backend: every mutating action the agent can take — checking availability, booking an appointment, moving inventory, pricing an estimate — is already isolated behind a single function in `tools/` (e.g. `book_installation_tool`, `inventory_api_tool`, `check_calendar_availability_tool`). Swapping a mock backend for a client's real system means changing the *inside* of that one function, not the agent's prompts, the LangGraph structure, or the HITL confirmation flow around it. The database schema (`backend/database/schema.py`) and calendar calls (`tools/scheduling.py`) are the two places to replace first; everything upstream of them (routing, confirmation, RAG, UI) is designed to keep working unmodified against a different backend as long as the tool functions' return shape doesn't change.
 
 ## Personal Data & Retention
 
@@ -156,7 +156,7 @@ sections/catalogue/       Generated catalogue section map (product name ↔ URL)
 secrets/                  Google OAuth credentials.json / token.json (gitignored)
 db/                       SQLite (company.db, checkpoints.db) + Chroma vector store (gitignored)
 tests/                    Pytest test suite (conftest.py fixtures + unit/integration tests)
-tools.py                  LangChain tools exposed to the assistant, per role
+tools/                    LangChain tools exposed to the assistant, one module per area (knowledge, inventory, scheduling, travel, pricing, emails, client, installer, tickets, manager)
 run.py                    Starts the inventory API and Streamlit UI together
 langgraph.json            LangGraph Studio graph registry (dev-only, see below)
 ```
@@ -356,7 +356,7 @@ container restart.
   container calls it.
 
 **Notes:**
-- `API_URL` (used by `tools.py` to reach the inventory API) defaults to
+- `API_URL` (used by `tools/` to reach the inventory API) defaults to
   `http://127.0.0.1:8000`, which is correct here since both services share
   one container's network namespace — no override needed for this
   single-container setup.
@@ -394,7 +394,7 @@ The suite (`tests/conftest.py` + `tests/test_*.py`) covers `backend/graph.py`
 (routing helpers plus full integration tests of all four HITL paths, using a
 scripted fake chat model — no real LLM calls), `backend/database/` (the
 entire ticket lifecycle and its audit log, business analytics, reservations),
-`tools.py` (pure helpers plus DB-backed tools with external services
+`tools/` (pure helpers plus DB-backed tools with external services
 mocked — geocoding, calendar, email, LLM, inventory API), `backend/qa_cache.py`
 (with a deterministic fake embeddings model), and `rag/rag_engine.py`'s pure
 functions. Every test runs against an isolated throwaway SQLite database

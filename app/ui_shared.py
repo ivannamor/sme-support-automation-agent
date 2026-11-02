@@ -2080,7 +2080,7 @@ def render_installer_job_briefing(active_job: dict) -> None:
     on_site_hours = quantity * hours_per_unit
     time_parts = [f"{on_site_hours:.1f}h {t('briefing_on_site')}"]
     try:
-        from tools import _compute_travel
+        from tools.travel import _compute_travel
 
         address = active_job.get("client_address", "")
         if address:
@@ -2112,7 +2112,7 @@ def render_installer_job_briefing(active_job: dict) -> None:
         if cache_key not in st.session_state:
             try:
                 from rag.rag_engine import get_assistant_response
-                from tools import _INSTALLATION_COLLECTIONS
+                from tools.knowledge import _INSTALLATION_COLLECTIONS
 
                 # Phrased around "general procedures... like model X" rather than
                 # "how do I install model X" — the installation manuals are generic
@@ -2323,7 +2323,7 @@ def render_ticket_map(tickets: list[dict]) -> None:
     ]
     if missing:
         from backend.database import update_ticket_coordinates
-        from tools import _geocode_location
+        from tools.travel import _geocode_location
 
         for i, ticket in enumerate(missing):
             if i > 0:

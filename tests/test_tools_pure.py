@@ -1,19 +1,15 @@
 """
-Tests for tools.py's pure/deterministic helper functions — no DB, no network,
+Tests for the tools' pure/deterministic helper functions — no DB, no network,
 no LLM calls needed for any of these.
 """
 
 import pytest
 
 from backend.database import ticket_code
-from tools import (
-    _format_duration,
-    _format_ticket_details,
-    _parse_ticket_reference,
-    _summarize_tickets,
-    compute_appointment_duration,
-    format_sources,
-)
+from tools.client import compute_appointment_duration
+from tools.knowledge import format_sources
+from tools.tickets import _format_ticket_details, _parse_ticket_reference, _summarize_tickets
+from tools.travel import _format_duration
 
 # ── _parse_ticket_reference ───────────────────────────────────────────────────
 

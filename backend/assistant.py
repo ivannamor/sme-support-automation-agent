@@ -96,7 +96,7 @@ try:
     )
 except ImportError as exc:
     raise ImportError(
-        "Could not import tools. Make sure tools.py is in the project root "
+        "Could not import tools. Make sure tools/ is in the project root "
         "and that you run the app from the project root."
     ) from exc
 

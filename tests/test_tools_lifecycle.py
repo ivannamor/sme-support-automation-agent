@@ -1,5 +1,5 @@
 """
-Tests for the DB-backed tools in tools.py — using the isolated `test_db`
+Tests for the DB-backed tools in tools/ — using the isolated `test_db`
 fixture for real database logic, and monkeypatching only the external
 service boundaries (geocoding, Google Calendar, SMTP, the LLM, and the
 inventory HTTP API) so no test makes a real network/API call.
@@ -175,7 +175,7 @@ def test_get_my_ticket_status_tool_scoped_to_assigned_installer(test_db):
 
 
 def test_request_site_survey_tool_creates_new_ticket(test_db, monkeypatch):
-    monkeypatch.setattr(tools, "_geocode_location", lambda addr: (45.0, 9.0, addr))
+    monkeypatch.setattr(tools.client, "_geocode_location", lambda addr: (45.0, 9.0, addr))
     username_var.set("client1")
     result = tools.request_site_survey_tool.invoke(
         {
@@ -203,7 +203,7 @@ def test_request_site_survey_tool_survives_geocode_failure(test_db, monkeypatch)
     def _boom(addr):
         raise ValueError("geocoding failed")
 
-    monkeypatch.setattr(tools, "_geocode_location", _boom)
+    monkeypatch.setattr(tools.client, "_geocode_location", _boom)
     username_var.set("client1")
     result = tools.request_site_survey_tool.invoke(
         {
@@ -242,7 +242,7 @@ def test_request_site_survey_tool_rejects_bad_quantity(test_db):
 
 
 def test_request_site_survey_tool_rejects_past_date(test_db, monkeypatch):
-    monkeypatch.setattr(tools, "_geocode_location", lambda addr: (45.0, 9.0, addr))
+    monkeypatch.setattr(tools.client, "_geocode_location", lambda addr: (45.0, 9.0, addr))
     username_var.set("client1")
     yesterday = future_date(days=-1)
     result = tools.request_site_survey_tool.invoke(
@@ -268,7 +268,7 @@ def test_request_site_survey_tool_rejects_past_date(test_db, monkeypatch):
 
 
 def test_extract_booking_fields_returns_only_mentioned_fields(test_db, monkeypatch):
-    from tools import BookingFormExtraction
+    from tools.client import BookingFormExtraction
 
     class _FakeStructuredLLM:
         def invoke(self, *args, **kwargs):
@@ -278,7 +278,7 @@ def test_extract_booking_fields_returns_only_mentioned_fields(test_db, monkeypat
         def with_structured_output(self, schema):
             return _FakeStructuredLLM()
 
-    monkeypatch.setattr(tools, "get_llm", lambda *a, **k: _FakeLLM())
+    monkeypatch.setattr(tools.client, "get_llm", lambda *a, **k: _FakeLLM())
     result = tools.extract_booking_fields("Mario Rossi vuole 2 IRIS")
     assert result == {"client_name": "Mario Rossi", "model": "IRIS", "quantity": 2}
 
@@ -289,11 +289,11 @@ def test_extract_booking_fields_returns_only_mentioned_fields(test_db, monkeypat
 def test_send_alert_to_manager_tool_sets_ticket_blocked(test_db, monkeypatch):
     bid = _make_open_installation_ticket()
     monkeypatch.setattr(
-        tools,
+        tools.installer,
         "get_llm",
         lambda *a, **k: _FakeInvokeLLM("MESSAGE: broken window\nTO DO: replace glass"),
     )
-    monkeypatch.setattr(tools, "send_manager_alert", lambda subject, body: True)
+    monkeypatch.setattr(tools.installer, "send_manager_alert", lambda subject, body: True)
     username_var.set("inst_a")
     tools.claim_installation_tool.invoke({"booking_id": bid})
     result = tools.send_alert_to_manager_tool.invoke(
@@ -311,7 +311,7 @@ def test_send_alert_to_manager_tool_sets_ticket_blocked(test_db, monkeypatch):
 
 def test_reservation_approve_deducts_stock_via_inventory_api(test_db, monkeypatch):
     monkeypatch.setattr(
-        tools,
+        tools.inventory,
         "_inventory_request",
         lambda action, model, quantity=1: (True, "Successfully reserved 2 unit(s) of IRIS."),
     )
@@ -372,7 +372,7 @@ def _reservation_status(res_id: int) -> str:
 def test_reservation_approve_deducts_stock_only_once(test_db, monkeypatch):
     calls = []
     monkeypatch.setattr(
-        tools,
+        tools.inventory,
         "_inventory_request",
         lambda action, model, quantity=1: calls.append((action, model, quantity)) or (True, "ok"),
     )
@@ -388,7 +388,7 @@ def test_reservation_approve_deducts_stock_only_once(test_db, monkeypatch):
 
 def test_reservation_failed_deduction_puts_request_back_to_pending(test_db, monkeypatch):
     monkeypatch.setattr(
-        tools,
+        tools.inventory,
         "_inventory_request",
         lambda action, model, quantity=1: (
             False,
@@ -406,7 +406,7 @@ def test_reservation_failed_deduction_puts_request_back_to_pending(test_db, monk
 def test_reservation_with_error_in_model_name_is_not_mistaken_for_failure(test_db, monkeypatch):
     # The old check was `"Error" in take_result`; success is now structured.
     monkeypatch.setattr(
-        tools,
+        tools.inventory,
         "_inventory_request",
         lambda action, model, quantity=1: (True, "Successfully reserved 2 unit(s) of ERROR-PROOF."),
     )

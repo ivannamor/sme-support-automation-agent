@@ -167,7 +167,7 @@ def build_installation_manual_collection(
     per data/ subfolder (installation manuals vs. maintenance manuals) with a
     different collection_name/doc_type/parsing_instruction, so the two stay
     in separate collections — installation procedures are installer/manager-only,
-    maintenance guidance is accessible to everyone (see tools.py's
+    maintenance guidance is accessible to everyone (see tools/knowledge.py's
     search_technical_manuals vs. search_installation_manuals_tool).
     """
 

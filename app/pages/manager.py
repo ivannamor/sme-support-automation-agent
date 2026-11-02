@@ -54,12 +54,12 @@ from backend.qa_cache import approve as qa_approve
 from backend.qa_cache import get_pending as qa_get_pending
 from backend.qa_cache import reject as qa_reject
 from tools import (
-    _THANKYOU_EMAIL_TEMPLATE,
     approve_booking_tool,
     approve_survey_estimate_tool,
     reject_booking_tool,
     reject_survey_estimate_tool,
 )
+from tools.emails import _THANKYOU_EMAIL_TEMPLATE
 from utils.escaping import md_escape, md_no_images
 
 st.set_page_config(page_title="Manager Portal", page_icon=None, layout="wide")
