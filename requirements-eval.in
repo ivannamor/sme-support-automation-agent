@@ -1,0 +1,6 @@
+# Only for the agent evals (evaluation/), which run from a developer's machine,
+# not in the app's image. To regenerate the pinned list, see README, "Dependencies".
+-c requirements.txt
+
+pyyaml
+ragas

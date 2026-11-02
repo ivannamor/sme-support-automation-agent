@@ -37,3 +37,15 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: mypy
       - run: pytest
+
+  # Informative: some known vulnerabilities have no fix yet, so this can't block.
+  audit:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit==2.10.1
+      - run: pip-audit -r requirements.txt --no-deps --disable-pip
