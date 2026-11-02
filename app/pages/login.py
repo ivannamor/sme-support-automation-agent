@@ -60,7 +60,7 @@ with col_staff:
                 target = {
                     "installer": "pages/installer.py",
                     "manager": "pages/manager.py",
-                }.get(result.role, "pages/manager.py")
+                }.get(result.role or "", "pages/manager.py")
                 st.switch_page(target)
             elif result.status == "locked":
                 st.error("Too many failed attempts. Try again in 15 minutes.")

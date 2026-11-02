@@ -30,9 +30,9 @@ def as_client():
         verified_client_email_var.reset(token)
 
 
-def _awaiting_client_ticket(client_email: str) -> int:
+def _awaiting_client_ticket(client_email: str, model: str = "IRIS") -> int:
     bid = db.create_pending_booking(
-        model="IRIS",
+        model=model,
         date_str="2026-08-01",
         time_str="10:00",
         ticket_phase="survey",
@@ -97,6 +97,32 @@ def test_respond_to_estimate_same_answer_for_missing_and_foreign_ticket(test_db,
     foreign = tools.respond_to_estimate_tool.invoke({"booking_id": bid, "response": "reject"})
     missing = tools.respond_to_estimate_tool.invoke({"booking_id": 9999, "response": "reject"})
     assert foreign.replace(db.ticket_code(bid), "X") == missing.replace(db.ticket_code(9999), "X")
+
+
+def test_accepting_an_estimate_for_an_unknown_model_uses_the_default_hours(
+    test_db, as_client, monkeypatch
+):
+    bid = _awaiting_client_ticket("mario@example.com", model="ORION")
+    as_client("mario@example.com")
+    monkeypatch.setattr(tools.client, "_compute_travel", lambda addr: {"duration_hours": 0.5})
+    booked = []
+    fake_booking = type(
+        "FakeBooking",
+        (),
+        {"invoke": staticmethod(lambda args: booked.append(args) or "CONFIRMED: booked.")},
+    )()
+    monkeypatch.setattr(tools.client, "book_installation_tool", fake_booking)
+
+    tools.respond_to_estimate_tool.invoke(
+        {
+            "booking_id": bid,
+            "response": "accept",
+            "new_date_str": "2030-01-10",
+            "new_time_str": "09:00",
+        }
+    )
+
+    assert booked[0]["duration_hours"] == 2.5  # 1 unit x 1.5 h + a 0.5 h drive each way
 
 
 def test_respond_to_estimate_owner_can_reject(test_db, as_client):

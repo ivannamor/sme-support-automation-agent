@@ -39,15 +39,9 @@ python_version = "3.12"
 # No __init__.py files: packages are namespace packages rooted at the project.
 explicit_package_bases = true
 ignore_missing_imports = true
-# `mypy` with no arguments checks backend/ only — the blocking CI gate.
-files = ["backend"]
-
-[[tool.mypy.overrides]]
-# Modules backend/ imports from outside its own package: type-check them only
-# when they are named on the command line (the informative CI job), so their
-# errors don't fail the blocking backend check.
-module = ["tools", "tools.*", "rag.*"]
-follow_imports = "silent"
+# `mypy` with no arguments checks all application code: the CI gate. Tests stay
+# out, as they rely on dynamic patching.
+files = ["app", "backend", "evaluation", "ingestion", "rag", "scripts", "tools", "ui", "utils", "run.py"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

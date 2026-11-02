@@ -8,6 +8,7 @@ import pytest
 from backend.database import ticket_code
 from tools.client import compute_appointment_duration
 from tools.knowledge import format_sources
+from tools.scheduling import AvailabilityInput
 from tools.tickets import _format_ticket_details, _parse_ticket_reference, _summarize_tickets
 from tools.travel import _format_duration
 
@@ -206,3 +207,8 @@ def test_format_sources_with_record_number():
     docs = [_FakeDoc({"source": "faq.jsonl", "record_number": 2})]
     result = format_sources(docs)
     assert "record 2" in result
+
+
+def test_availability_time_is_optional_and_may_be_an_explicit_null():
+    assert AvailabilityInput(date_str="2030-01-15").time_str is None
+    assert AvailabilityInput(date_str="2030-01-15", time_str=None).time_str is None

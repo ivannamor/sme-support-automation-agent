@@ -54,7 +54,7 @@ APPOINTMENT_DURATION_HOURS = 1
 
 class AvailabilityInput(BaseModel):
     date_str: str = Field(description="Date to check in YYYY-MM-DD format.")
-    time_str: str = Field(
+    time_str: str | None = Field(
         default=None,
         description=(
             "Optional specific time in HH:MM (24-hour) to check. "
@@ -69,7 +69,7 @@ class AvailabilityInput(BaseModel):
 
 @tool(args_schema=AvailabilityInput)
 def check_calendar_availability_tool(
-    date_str: str, time_str: str = None, duration_hours: float = APPOINTMENT_DURATION_HOURS
+    date_str: str, time_str: str | None = None, duration_hours: float = APPOINTMENT_DURATION_HOURS
 ) -> str:
     """
     Checks the installer's Google Calendar for free/busy slots.

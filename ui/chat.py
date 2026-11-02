@@ -3,6 +3,7 @@
 import contextlib
 import re
 import time
+from typing import cast
 from urllib.parse import quote as _url_quote
 
 import streamlit as st
@@ -181,7 +182,8 @@ def _stream_resume(agent, decision: str, selected_model: str):
     result = TurnResult()
     with st.chat_message("assistant", avatar=_chat_avatar("assistant")):
         raw_text = st.write_stream(agent.stream_resume(decision, _get("thread_id"), result))
-        _save_assistant_turn(result, raw_text)
+        # The stream only yields text, so write_stream returns a str, not a list.
+        _save_assistant_turn(result, cast(str, raw_text))
     st.rerun()
 
 
@@ -282,7 +284,7 @@ def handle_user_turn(user_prompt: str, agent, selected_model: str, is_synthetic:
     result = TurnResult()
     with st.chat_message("assistant", avatar=_chat_avatar("assistant")):
         raw_text = st.write_stream(agent.stream_ask(user_prompt, _get("thread_id"), result))
-        _save_assistant_turn(result, raw_text, user_question=user_prompt)
+        _save_assistant_turn(result, cast(str, raw_text), user_question=user_prompt)
 
     st.rerun()
 

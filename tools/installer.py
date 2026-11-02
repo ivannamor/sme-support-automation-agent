@@ -57,7 +57,7 @@ class AlertInput(BaseModel):
 def _is_assigned_to_caller(booking_id: int) -> bool:
     """True if the ticket exists and is assigned to the calling installer."""
     booking = get_booking(booking_id)
-    return bool(booking) and booking.get("assigned_to") == username_var.get()
+    return booking is not None and booking.get("assigned_to") == username_var.get()
 
 
 @tool(args_schema=AlertInput)

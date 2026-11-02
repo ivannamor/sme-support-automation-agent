@@ -197,7 +197,9 @@ with panel_col:
                     selection_mode="single-cell",
                     key=f"tickets_table_{status_filter}",
                 )
-                selected_cells = event.selection.cells if event and event.selection else []
+                selected_cells = (
+                    event["selection"]["cells"] if event and event.get("selection") else []
+                )
                 selected_rows = [row for row, _col in selected_cells]
                 # Defensive bound-check: the table can shrink between reruns (e.g.
                 # a ticket gets approved/closed) while a stale selection index from

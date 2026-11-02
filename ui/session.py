@@ -44,7 +44,7 @@ def _set(key: str, value):
     st.session_state[_k(key)] = value
 
 
-def require_auth(allowed_roles: list[str] = None):
+def require_auth(allowed_roles: list[str] | None = None):
     inject_global_css()
     role = st.session_state.get("role")
     if not role:

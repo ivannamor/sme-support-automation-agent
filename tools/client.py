@@ -310,9 +310,10 @@ def respond_to_estimate_tool(
     quantity = booking.get("quantity", 1)
     try:
         travel = _compute_travel(booking.get("client_address", ""))
+        product = get_product(booking["model"])
         duration_hours = compute_appointment_duration(
             quantity,
-            get_product(booking["model"]).get("installation_hours", 1.5),
+            product.get("installation_hours", 1.5) if product else 1.5,
             travel["duration_hours"],
         )
     except Exception as exc:
