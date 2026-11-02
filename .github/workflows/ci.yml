@@ -39,5 +39,5 @@ jobs:
         run: mypy
       - name: mypy (rest of the codebase, informative)
         continue-on-error: true
-        run: mypy app rag ingestion evaluation scripts utils tools run.py
+        run: mypy app ui rag ingestion evaluation scripts utils tools run.py
       - run: pytest

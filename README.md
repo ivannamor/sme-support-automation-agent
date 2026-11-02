@@ -114,7 +114,6 @@ reason to keep `CONVERSATION_RETENTION_DAYS` no longer than necessary.
 app/
   app.py                  Streamlit entry point / page router
   api_server.py           FastAPI inventory API
-  ui_shared.py            Shared UI helpers: sidebar, chat rendering, translations, CSS, ticket widgets
   pages/
     login.py               Role selection / installer & manager login
     client.py               Client chat portal
@@ -156,6 +155,7 @@ sections/catalogue/       Generated catalogue section map (product name ↔ URL)
 secrets/                  Google OAuth credentials.json / token.json (gitignored)
 db/                       SQLite (company.db, checkpoints.db) + Chroma vector store (gitignored)
 tests/                    Pytest test suite (conftest.py fixtures + unit/integration tests)
+ui/                       Shared Streamlit UI, one module per area (i18n, layout, session, sidebar, tickets, ticket_map, briefing, intents, chat, booking_form, client_portal)
 tools/                    LangChain tools exposed to the assistant, one module per area (knowledge, inventory, scheduling, travel, pricing, emails, client, installer, tickets, manager)
 run.py                    Starts the inventory API and Streamlit UI together
 langgraph.json            LangGraph Studio graph registry (dev-only, see below)
@@ -279,10 +279,10 @@ Edit the file and re-run to update them. Delete it and re-run to switch them off
 .venv\Scripts\python.exe run.py
 ```
 
-Or run the two services separately (requires `INVENTORY_API_KEY` in `.env`):
+Or run the two services separately, from the project root (requires `INVENTORY_API_KEY` in `.env`):
 
 ```powershell
-.venv\Scripts\python.exe app\api_server.py
+.venv\Scripts\python.exe -m app.api_server
 .venv\Scripts\python.exe -m streamlit run app\app.py
 ```
 
@@ -366,7 +366,7 @@ container restart.
   or restart them separately), split `docker-compose.yml` into two services
   from the same image, overriding `command:` to run
   `uvicorn app.api_server:app --host 0.0.0.0 --port 8000` and
-  `streamlit run app/app.py` respectively, point `API_URL` at the other
+  `python -m streamlit run app/app.py` respectively, point `API_URL` at the other
   service's container name (e.g. `http://api:8000`), and give both the same
   `INVENTORY_API_KEY`. Keep port 8000 on the internal network only.
 

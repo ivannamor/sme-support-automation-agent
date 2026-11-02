@@ -8,7 +8,7 @@ import re
 import pytest
 import streamlit as st
 
-from app import ui_shared
+from ui import tickets
 from utils.escaping import html_md_escape, md_escape, md_no_images
 
 
@@ -54,10 +54,10 @@ def test_ticket_card_escapes_what_the_client_typed(monkeypatch):
     shown = []
     monkeypatch.setattr(st, "markdown", lambda text, **kwargs: shown.append(text))
     monkeypatch.setattr(st, "caption", lambda text, **kwargs: shown.append(text))
-    monkeypatch.setattr(ui_shared, "get_ticket_log", lambda _: [])
-    monkeypatch.setattr(ui_shared, "get_product", lambda _: None)
+    monkeypatch.setattr(tickets, "get_ticket_log", lambda _: [])
+    monkeypatch.setattr(tickets, "get_product", lambda _: None)
 
-    ui_shared.render_ticket_card(
+    tickets.render_ticket_card(
         {
             "id": 1,
             "ticket_status": "new",

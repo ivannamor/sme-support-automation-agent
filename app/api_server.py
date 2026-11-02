@@ -19,12 +19,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-# Run standalone (python app/api_server.py) as well as via run.py — make sure
-# the project root is importable either way.
-# TODO PR 11: drop once app/ is restructured (run as `python -m app.api_server`).
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from backend import database
 from backend.secrets_provider import get_secret
 

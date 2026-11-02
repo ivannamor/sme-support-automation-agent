@@ -15,15 +15,8 @@ Pages:
 """
 
 import datetime
-import sys
-from pathlib import Path
 
 import streamlit as st
-
-# Streamlit only puts app/ on sys.path. TODO PR 11: drop with the app/ restructure.
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.checkpointing import prune_stale_threads
 from backend.database import init_db, prune_conversation_log

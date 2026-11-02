@@ -3,20 +3,37 @@ Manager page — ticket dashboard (tickets/clients/alerts/cache/analytics) + cha
 """
 
 import datetime
-import sys
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-# TODO PR 11: drop with the app/ restructure (imports ui_shared as top-level).
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-APP_DIR = Path(__file__).resolve().parents[1]
-for p in (str(PROJECT_ROOT), str(APP_DIR)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-from ui_shared import (
+from backend.database import (
+    get_alerts,
+    get_alerts_for_booking,
+    get_all_tickets,
+    get_business_analytics,
+    get_clients,
+    get_job_completions,
+    get_usage_stats,
+    mark_alerts_read,
+    reset_operational_data,
+    resolve_job_completion,
+    ticket_code,
+    update_ticket_details,
+)
+from backend.email_utils import send_email
+from backend.llm_provider import get_llm
+from backend.qa_cache import approve as qa_approve
+from backend.qa_cache import get_pending as qa_get_pending
+from backend.qa_cache import reject as qa_reject
+from tools import (
+    approve_booking_tool,
+    approve_survey_estimate_tool,
+    reject_booking_tool,
+    reject_survey_estimate_tool,
+)
+from tools.emails import _THANKYOU_EMAIL_TEMPLATE
+from ui import (
     get_agent,
     handle_user_turn,
     init_chat_session,
@@ -32,34 +49,7 @@ from ui_shared import (
     render_ticket_summary,
     require_auth,
     t,
-    ticket_code,
 )
-
-from backend.database import (
-    get_alerts,
-    get_alerts_for_booking,
-    get_all_tickets,
-    get_business_analytics,
-    get_clients,
-    get_job_completions,
-    get_usage_stats,
-    mark_alerts_read,
-    reset_operational_data,
-    resolve_job_completion,
-    update_ticket_details,
-)
-from backend.email_utils import send_email
-from backend.llm_provider import get_llm
-from backend.qa_cache import approve as qa_approve
-from backend.qa_cache import get_pending as qa_get_pending
-from backend.qa_cache import reject as qa_reject
-from tools import (
-    approve_booking_tool,
-    approve_survey_estimate_tool,
-    reject_booking_tool,
-    reject_survey_estimate_tool,
-)
-from tools.emails import _THANKYOU_EMAIL_TEMPLATE
 from utils.escaping import md_escape, md_no_images
 
 st.set_page_config(page_title="Manager Portal", page_icon=None, layout="wide")

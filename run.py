@@ -8,7 +8,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
-API_SERVER_PATH = PROJECT_ROOT / "app" / "api_server.py"
 STREAMLIT_APP_PATH = PROJECT_ROOT / "app" / "app.py"
 
 API_HEALTH_URL = "http://127.0.0.1:8000/health"
@@ -49,7 +48,7 @@ def start_services():
     print("🚀 Starting Inventory API...")
 
     api_process = subprocess.Popen(
-        [sys.executable, str(API_SERVER_PATH)],
+        [sys.executable, "-m", "app.api_server"],
         cwd=str(PROJECT_ROOT),
     )
 
