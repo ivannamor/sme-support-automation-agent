@@ -307,12 +307,14 @@ def test_run_routing_records_the_first_decision(monkeypatch):
 
 
 def test_run_knowledge_records_the_retrieved_documents(monkeypatch):
-    monkeypatch.setattr(tools, "_expand_query", lambda query: query)
+    monkeypatch.setattr(tools.knowledge, "_expand_query", lambda query: query)
     doc = Document(
         page_content="legno lamellare",
         metadata={"source": IRIS_URL, "collection": "catalogue_specs"},
     )
-    monkeypatch.setattr(tools, "get_assistant_response", lambda **kwargs: ("answer", [doc]))
+    monkeypatch.setattr(
+        tools.knowledge, "get_assistant_response", lambda **kwargs: ("answer", [doc])
+    )
     search = {"name": "search_technical_manuals", "args": {"query": "IRIS"}, "id": "c1"}
 
     with sandbox():
@@ -339,5 +341,5 @@ def test_run_knowledge_records_the_retrieved_documents(monkeypatch):
             ],
         }
     ]
-    assert tools.get_assistant_response.__name__ == "<lambda>"  # the recorder was removed
+    assert tools.knowledge.get_assistant_response.__name__ == "<lambda>"  # the recorder was removed
     assert knowledge_checks(_knowledge_case(), run)["retrieval_hit"]

@@ -46,7 +46,7 @@ files = ["backend"]
 # Modules backend/ imports from outside its own package: type-check them only
 # when they are named on the command line (the informative CI job), so their
 # errors don't fail the blocking backend check.
-module = ["tools", "rag.*"]
+module = ["tools", "tools.*", "rag.*"]
 follow_imports = "silent"
 
 [tool.pytest.ini_options]

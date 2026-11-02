@@ -110,9 +110,9 @@ def test_respond_to_estimate_owner_can_reject(test_db, as_client):
 def test_respond_to_estimate_owner_can_accept(test_db, as_client, monkeypatch):
     bid = _awaiting_client_ticket("mario@example.com")
     as_client("mario@example.com")
-    monkeypatch.setattr(tools, "_compute_travel", lambda addr: {"duration_hours": 0.5})
+    monkeypatch.setattr(tools.client, "_compute_travel", lambda addr: {"duration_hours": 0.5})
     monkeypatch.setattr(
-        tools,
+        tools.client,
         "book_installation_tool",
         type("FakeBooking", (), {"invoke": staticmethod(lambda args: "CONFIRMED: booked.")})(),
     )
@@ -146,7 +146,7 @@ def _open_ticket() -> int:
 
 
 def test_complete_job_refuses_unassigned_ticket(test_db, monkeypatch):
-    monkeypatch.setattr(tools, "get_llm", lambda *a, **k: _FakeInvokeLLM())
+    monkeypatch.setattr(tools.installer, "get_llm", lambda *a, **k: _FakeInvokeLLM())
     bid = _open_ticket()
     db.claim_booking(bid, "inst_a")
     username_var.set("inst_b")
@@ -157,7 +157,7 @@ def test_complete_job_refuses_unassigned_ticket(test_db, monkeypatch):
 
 
 def test_complete_job_allowed_for_assigned_installer(test_db, monkeypatch):
-    monkeypatch.setattr(tools, "get_llm", lambda *a, **k: _FakeInvokeLLM())
+    monkeypatch.setattr(tools.installer, "get_llm", lambda *a, **k: _FakeInvokeLLM())
     bid = _open_ticket()
     db.claim_booking(bid, "inst_a")
     username_var.set("inst_a")
@@ -166,8 +166,8 @@ def test_complete_job_allowed_for_assigned_installer(test_db, monkeypatch):
 
 
 def test_send_alert_refuses_unassigned_ticket(test_db, monkeypatch):
-    monkeypatch.setattr(tools, "get_llm", lambda *a, **k: _FakeInvokeLLM())
-    monkeypatch.setattr(tools, "send_manager_alert", lambda subject, body: True)
+    monkeypatch.setattr(tools.installer, "get_llm", lambda *a, **k: _FakeInvokeLLM())
+    monkeypatch.setattr(tools.installer, "send_manager_alert", lambda subject, body: True)
     bid = _open_ticket()
     username_var.set("inst_a")  # never claimed it
     result = tools.send_alert_to_manager_tool.invoke({"message": "broken", "booking_id": bid})
@@ -176,8 +176,8 @@ def test_send_alert_refuses_unassigned_ticket(test_db, monkeypatch):
 
 
 def test_send_alert_without_ticket_still_allowed(test_db, monkeypatch):
-    monkeypatch.setattr(tools, "get_llm", lambda *a, **k: _FakeInvokeLLM())
-    monkeypatch.setattr(tools, "send_manager_alert", lambda subject, body: True)
+    monkeypatch.setattr(tools.installer, "get_llm", lambda *a, **k: _FakeInvokeLLM())
+    monkeypatch.setattr(tools.installer, "send_manager_alert", lambda subject, body: True)
     username_var.set("inst_a")
     result = tools.send_alert_to_manager_tool.invoke({"message": "van broke down"})
     assert "sent to the manager" in result
