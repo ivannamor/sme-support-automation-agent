@@ -1,0 +1,44 @@
+# The libraries the app and the ingestion scripts use directly.
+# After changing this file, regenerate the pinned list (see README, "Dependencies").
+
+# UI
+pandas
+pydeck
+streamlit
+
+# Inventory API
+fastapi
+uvicorn
+
+# Agent and LLM
+langchain
+langchain-core
+langchain-openai
+langgraph
+langgraph-checkpoint-sqlite
+openai
+pydantic
+typing_extensions
+
+# RAG
+flashrank
+langchain-chroma
+langchain-community
+rank-bm25
+
+# Ingestion
+llama-parse
+
+# Google Calendar
+google-api-python-client
+google-auth
+google-auth-oauthlib
+
+# Not used directly: chromadb brings it in, and older versions have a known vulnerability.
+opentelemetry-api>=1.45.1
+
+# Everything else
+bcrypt
+python-dotenv
+requests
+tzdata

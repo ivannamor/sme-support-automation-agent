@@ -372,8 +372,8 @@ container restart.
 
 ## Development
 
-Dev tools (pytest, ruff, mypy) are pinned in `requirements-dev.txt` and
-configured in `pyproject.toml`:
+Dev tools (pytest, ruff, mypy) and the eval dependencies are pinned through
+`requirements-dev.txt`, and the tools are configured in `pyproject.toml`:
 
 ```powershell
 pip install -r requirements-dev.txt
@@ -386,6 +386,24 @@ pytest                # tests
 
 GitHub Actions (`.github/workflows/ci.yml`) runs all four on every push to
 `main` and every pull request, and all of them are blocking.
+
+## Dependencies
+
+| File | What it is |
+|---|---|
+| `requirements.in` | The libraries the app and the ingestion scripts use directly. Edit this one |
+| `requirements.txt` | Every exact version, generated from it. What the app's image installs |
+| `requirements-eval.in` / `requirements-eval.txt` | The same pair for the agent evals (RAGAS), which stay out of the image |
+| `requirements-dev.txt` | Both lists above, plus the dev tools |
+
+After changing an `.in` file, regenerate with [uv](https://docs.astral.sh/uv/). The existing versions are kept unless a change requires otherwise; add `--upgrade-package <name>` to move one on purpose:
+
+```powershell
+uv pip compile requirements.in -o requirements.txt --universal --python-version 3.12
+uv pip compile requirements-eval.in -o requirements-eval.txt --universal --python-version 3.12
+```
+
+CI runs `pip-audit` on every PR. It is informative only, because some known vulnerabilities have no fix yet.
 
 ## Database Migrations
 
