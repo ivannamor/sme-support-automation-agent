@@ -126,7 +126,7 @@ backend/
   checkpointing.py        Shared SQLite checkpointer (conversation state) + pruning of idle threads
   studio_graphs.py        Entry points for LangGraph Studio (see langgraph.json)
   auth.py                 bcrypt-based installer/manager authentication
-  database/               SQLite schema and seeding, plus one module per area (tickets, jobs, alerts, inventory, users, clients, settings, activity)
+  database/               SQLite versioned migrations and seeding, plus one module per area (tickets, jobs, alerts, inventory, users, clients, settings, activity)
   company_config.py       Company-specific naming/branding, env-overridable
   llm_provider.py         OpenRouter model registry + cost calculation
   usage_tracking.py       Per-call token/cost accounting from provider-reported usage
@@ -386,6 +386,25 @@ pytest                # tests
 
 GitHub Actions (`.github/workflows/ci.yml`) runs all four on every push to
 `main` and every pull request, and all of them are blocking.
+
+## Database Migrations
+
+The database's `PRAGMA user_version` records the last migration applied. At startup, `init_db` runs the pending files in `backend/database/migrations/`, each in its own transaction, so a migration applies completely or not at all. Seed data (catalogue products, default costs) is refreshed at every start, separately.
+
+To change the schema, add the next numbered file and leave the shipped ones as they are:
+
+```python
+# backend/database/migrations/m0002_add_frame_color.py
+import sqlite3
+
+
+def upgrade(conn: sqlite3.Connection) -> None:
+    conn.execute("ALTER TABLE pending_bookings ADD COLUMN frame_color TEXT DEFAULT ''")
+```
+
+Don't call `conn.commit()` or `conn.executescript()` inside `upgrade`: either would end the transaction.
+
+Before migrating an existing database, the app copies it next to the original (for example `db/company.db.bak-v1`, where the number is the version it was at). Migrations only go forward. To undo one, stop the app and replace `db/company.db` with the backup, deleting any `company.db-wal` and `company.db-shm` files, and run the older code that matches it. If the database is newer than the code, the app refuses to start.
 
 ## Testing
 
