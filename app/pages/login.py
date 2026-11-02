@@ -1,20 +1,9 @@
 """Login and role selection page."""
 
-import sys
-from pathlib import Path
-
 import streamlit as st
 
-# TODO PR 11: drop with the app/ restructure (imports ui_shared as top-level).
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-APP_DIR = Path(__file__).resolve().parents[1]
-for p in (str(PROJECT_ROOT), str(APP_DIR)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-from ui_shared import inject_global_css
-
 from backend.auth import authenticate
+from ui import inject_global_css
 
 st.set_page_config(
     page_title="Assistant",

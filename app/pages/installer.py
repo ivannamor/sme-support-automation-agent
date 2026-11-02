@@ -1,18 +1,16 @@
 """Installer page — assigned jobs panel on the right, technical chat on the left."""
 
-import sys
-from pathlib import Path
-
 import streamlit as st
 
-# TODO PR 11: drop with the app/ restructure (imports ui_shared as top-level).
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-APP_DIR = Path(__file__).resolve().parents[1]
-for p in (str(PROJECT_ROOT), str(APP_DIR)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-from ui_shared import (
+from backend.database import (
+    claim_booking,
+    decline_booking,
+    get_approved_bookings,
+    get_installer_active_booking,
+    release_booking,
+    ticket_code,
+)
+from ui import (
     get_agent,
     handle_user_turn,
     init_chat_session,
@@ -28,15 +26,6 @@ from ui_shared import (
     render_ticket_summary,
     require_auth,
     t,
-    ticket_code,
-)
-
-from backend.database import (
-    claim_booking,
-    decline_booking,
-    get_approved_bookings,
-    get_installer_active_booking,
-    release_booking,
 )
 from utils.escaping import md_escape
 
