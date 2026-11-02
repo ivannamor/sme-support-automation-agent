@@ -14,6 +14,7 @@ import backend.assistant as assistant
 import tools
 from backend import database
 from backend.assistant import DoorAssistantAgent
+from backend.database import connection
 from evaluation.calibrate import load_labelled_pairs, score
 from evaluation.compare import changed_cases
 from evaluation.dataset import NO_TOOL, KnowledgeCase, RoutingCase, load_cases
@@ -276,11 +277,11 @@ def test_calibration_score_counts_false_yes_and_false_no():
 
 
 def test_sandbox_uses_a_fresh_database_and_restores_the_real_one():
-    real = database.DB_PATH
+    real = connection.DB_PATH
     with sandbox() as tmp:
-        assert database.DB_PATH.parent == tmp
+        assert connection.DB_PATH.parent == tmp
         assert database.get_inventory()  # seeded
-    assert real == database.DB_PATH
+    assert real == connection.DB_PATH
 
 
 def _agent_with(monkeypatch, role: str, *replies: AIMessage) -> DoorAssistantAgent:

@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 import os
+import socket
 
 import pytest
 from langchain_core.embeddings import Embeddings
@@ -18,6 +19,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 from backend import checkpointing, database
+from backend.database import connection
 from backend.usage_tracking import USAGE_RECORDER
 
 
@@ -48,7 +50,7 @@ def _isolate_storage(tmp_path, monkeypatch):
     the test_db fixture fails on a missing table instead of silently using
     dev data.
     """
-    monkeypatch.setattr(database, "DB_PATH", tmp_path / "test_db_not_requested.db")
+    monkeypatch.setattr(connection, "DB_PATH", tmp_path / "test_db_not_requested.db")
     monkeypatch.setattr(checkpointing, "CHECKPOINT_DB_PATH", tmp_path / "checkpoints.db")
     monkeypatch.setattr(checkpointing, "_saver", None)
     yield
@@ -64,16 +66,39 @@ def future_date(days: int = 30) -> str:
     return (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
 
 
+@pytest.fixture(autouse=True)
+def outbound(monkeypatch):
+    """
+    Refuses and records every connection leaving this machine: a developer's
+    .env holds real keys, and a test whose mock went stale must not spend money.
+    """
+    attempts = []
+    connect = socket.socket.connect
+
+    def refuse_outbound(self, address):
+        if self.family in (socket.AF_INET, socket.AF_INET6) and address[0] not in (
+            "127.0.0.1",
+            "::1",
+            "localhost",
+        ):
+            attempts.append(address)
+            raise OSError("no outbound connections in tests")
+        return connect(self, address)
+
+    monkeypatch.setattr(socket.socket, "connect", refuse_outbound)
+    return attempts
+
+
 @pytest.fixture
 def test_db(tmp_path, monkeypatch):
     """
-    Points backend.database at a throwaway SQLite file and initializes a
+    Points backend.database.connection at a throwaway SQLite file and initializes a
     fresh schema — get_connection() reads DB_PATH as a module global at call
     time, so monkeypatching it here fully isolates every test from the real
     dev database (db/company.db is never opened by any test).
     """
     db_path = tmp_path / "test.db"
-    monkeypatch.setattr(database, "DB_PATH", db_path)
+    monkeypatch.setattr(connection, "DB_PATH", db_path)
     database.init_db(reset=True)
     yield db_path
 
