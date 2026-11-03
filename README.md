@@ -6,7 +6,7 @@
 >
 > **Known limitation: answer quality.** The assistant still misses or gets wrong many technical questions, including some the documentation does answer. On the [evaluation set](#baseline), about 60% of knowledge questions pass. Better retrieval is a planned improvement.
 >
-> **Still to come:** module refactoring, versioned database migrations, dependency and Docker cleanup, and cloud deployment.
+> **Still to come:** cloud deployment.
 
 A multi-role AI assistant for a windows/doors/accessories business, built with Streamlit, LangChain/LangGraph, OpenRouter, Chroma, and a small FastAPI inventory service. The app itself is company-agnostic (branding is entirely env-driven — see `backend/company_config.py`); this particular deployment's RAG knowledge base is built from **Marinig Serramenti**'s real public catalogue and manuals (`data/website.txt`, `data/installation manuals/`, `data/maintainance manuals/`), so the assistant answers with real product data even though the surrounding app, database, and calendar are demo infrastructure (see "Mock Backends vs. Real Integration" below).
 
@@ -316,8 +316,8 @@ The main conversational LLM runs at `temperature=0.2` + `top_p=0.9` (factual gro
 The app runs as a single container: `run.py` starts both the FastAPI inventory
 API and the Streamlit UI in one process, exactly as it does locally. Stateful
 data (SQLite, Chroma, logs, Google OAuth secrets, source data, the generated
-catalogue section map) is bind-mounted from the host so it survives image
-rebuilds and stays out of the built image.
+catalogue section map, the catalogue PDFs served to the browser) is bind-mounted
+from the host so it survives image rebuilds and stays out of the built image.
 
 **Prerequisites (do these on the host first, not in the container):**
 
@@ -356,6 +356,13 @@ container restart.
   container calls it.
 
 **Notes:**
+- The container runs as a non-root user (uid 1000) that can write only to the
+  mounted folders. Docker Desktop on Windows needs no setup for this. On a Linux
+  host, make them writable first:
+  `sudo chown -R 1000:1000 db logs secrets data sections app/static`.
+- The health check covers both services. If Streamlit stops, the container exits
+  and `restart: unless-stopped` starts it again. If only the API stops, the
+  container is marked `unhealthy` but Compose doesn't restart it.
 - `API_URL` (used by `tools/` to reach the inventory API) defaults to
   `http://127.0.0.1:8000`, which is correct here since both services share
   one container's network namespace — no override needed for this
