@@ -1,5 +1,6 @@
 import os
 import secrets
+import signal
 import subprocess
 import sys
 import time
@@ -42,38 +43,52 @@ def wait_for_api(process: subprocess.Popen) -> bool:
     return False
 
 
+def stop_on_sigterm(_signum, _frame) -> None:
+    """
+    `docker stop` sends SIGTERM. In a container this script is PID 1, which
+    ignores that signal unless it has a handler, so Docker would wait 10 seconds
+    and then kill everything. Handle it like Ctrl+C instead.
+    """
+    raise KeyboardInterrupt
+
+
 def start_services():
+    from backend.database import init_db
+
     ensure_inventory_api_key()
+    signal.signal(signal.SIGTERM, stop_on_sigterm)
 
-    print("🚀 Starting Inventory API...")
+    # Before the API starts: its health check reads the inventory table.
+    init_db()
 
-    api_process = subprocess.Popen(
-        [sys.executable, "-m", "app.api_server"],
-        cwd=str(PROJECT_ROOT),
-    )
-
-    if not wait_for_api(api_process):
-        print("⚠️  Inventory API did not become healthy — inventory tools will report errors.")
-
-    print("🎨 Starting Streamlit Interface...")
-
+    processes = []
     try:
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "streamlit",
-                "run",
-                str(STREAMLIT_APP_PATH),
-                "--server.runOnSave=true",
-            ],
+        print("🚀 Starting Inventory API...")
+
+        api_process = subprocess.Popen(
+            [sys.executable, "-m", "app.api_server"],
             cwd=str(PROJECT_ROOT),
         )
+        processes.append(api_process)
+
+        if not wait_for_api(api_process):
+            print("⚠️  Inventory API did not become healthy — inventory tools will report errors.")
+
+        print("🎨 Starting Streamlit Interface...")
+
+        streamlit_process = subprocess.Popen(
+            [sys.executable, "-m", "streamlit", "run", str(STREAMLIT_APP_PATH)],
+            cwd=str(PROJECT_ROOT),
+        )
+        processes.append(streamlit_process)
+        streamlit_process.wait()
     except KeyboardInterrupt:
         print("\n🛑 Shutting down services...")
     finally:
-        api_process.terminate()
-        api_process.wait()
+        for process in processes:
+            process.terminate()
+        for process in processes:
+            process.wait()
 
 
 if __name__ == "__main__":

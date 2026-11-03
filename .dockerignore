@@ -31,12 +31,12 @@ secrets/
 db/
 logs/
 data/
-sections/
 app/static/
 
 # Streamlit local machine-id file (not the config.toml theme, which IS needed)
 .streamlit/config
 
-# Docs/tests not needed at runtime
-README.md
+# Docs, tests and evals not needed at runtime
+*.md
 tests/
+evaluation/
